@@ -6,6 +6,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 
@@ -32,9 +34,55 @@ public class Manga {
     @NotNull
     @Schema(description = "Status de publicação do mangá", example = "FINALIZADO")
     @Enumerated(EnumType.STRING)
-    StatusPublication status;
+    private StatusPublication status;
 
 
+    @OneToOne(cascade = CascadeType.ALL)
+    @JoinColumn(name = "manga_details_id", referencedColumnName = "id")
+    @Schema(description = "Detalhes técnicos de publicação do mangá")
+    private MangaDetails details;
+
+    @NotNull(message = "O mangá precisa ter um autor vinculado")
+    @ManyToOne
+    @JoinColumn(name = "author_id", nullable = false)
+    @Schema(description = "Autor responsável pela obra")
+    private Author author;
+
+    @OneToMany(mappedBy = "manga", cascade = CascadeType.ALL)
+    @Schema(description = "Lista de capítulos lançados para este mangá")
+    private List<Chapter> chapters = new ArrayList<>();
+
+
+    @ManyToMany
+    @JoinTable(
+            name = "manga_genre", // Nome da tabela intermediária que será criada
+            joinColumns = @JoinColumn(name = "manga_id"), // A chave estrangeira desta classe (Manga)
+            inverseJoinColumns = @JoinColumn(name = "genre_id") // A chave estrangeira da outra classe (Genre)
+    )
+    @Schema(description = "Lista de gêneros deste mangá")
+    private List<Genre> genres = new ArrayList<>();
+
+    public List<Genre> getGenres() {
+        return genres;
+    }
+
+    public void setGenres(List<Genre> genres) {this.genres = genres;}
+
+    public List<Chapter> getChapters() {
+        return chapters;
+    }
+    public void setChapters(List<Chapter> chapters) {this.chapters = chapters;}
+
+    public Author getAuthor() { return author; }
+
+    public void setAuthor(Author author) { this.author = author; }
+
+    public MangaDetails getDetails() {
+        return details;
+    }
+    public void setDetails(MangaDetails details) {
+        this.details = details;
+    }
 
     public Manga() {
     }

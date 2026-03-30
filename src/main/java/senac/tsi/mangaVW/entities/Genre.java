@@ -1,14 +1,14 @@
 package senac.tsi.mangaVW.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 @Entity
@@ -24,6 +24,18 @@ public class Genre {
     @Size(min=1, max=50)
     @Schema(description = "Nome do gênero", example = "Fantasia")
     private String name;
+
+
+    @ManyToMany(mappedBy = "genres")
+    @JsonIgnore
+    @Schema(description = "Lista de mangás que pertencem a este gênero")
+    private List<Manga> mangas = new ArrayList<>();
+
+    public List<Manga> getMangas() {
+        return mangas;
+    }
+
+    public void setMangas(List<Manga> mangas) {this.mangas = mangas;}
 
     public Genre() {
     }

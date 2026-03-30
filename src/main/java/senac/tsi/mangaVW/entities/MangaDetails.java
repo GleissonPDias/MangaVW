@@ -11,10 +11,6 @@ import java.util.Objects;
 
 @Entity
 public class MangaDetails {
-    //id (long): Gerado pelo IDENTITY.
-    //isbn (String): O código de barras internacional do livro (ex: "978-85-336-1337-9"). Pode ter um @Size(max = 20).
-    //publicationYear (int ou Integer): O ano em que o mangá começou a ser publicado. Podemos usar a validação @Min(1900) e @Max(2100) para garantir que ninguém coloque um ano impossível.
-    //licensed (boolean): Um verdadeiro/falso indicando se a obra tem licenciamento oficial no país.
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
