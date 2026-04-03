@@ -1,10 +1,11 @@
 package senac.tsi.mangaVW.entities;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+
 
 import java.util.Objects;
 
@@ -13,7 +14,7 @@ public class Page {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Schema(description = "ID único da pagina", example = "3")
+    @Schema(description = "ID único da pagina", example = "3", accessMode = Schema.AccessMode.READ_ONLY)
     private long id;
 
 
@@ -22,13 +23,12 @@ public class Page {
 
     @Schema(description = "URL da imagem", example = "https://mangadex/berserk/cap10/16")
     @NotBlank
-    @NotNull
     private String imageUrl;
 
 
-    @NotNull(message = "A página precisa pertencer a um capítulo")
     @ManyToOne
-    @JsonIgnore
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @JsonIgnoreProperties({"chapterNumber", "language", "pages", "manga"})
     @JoinColumn(name = "chapter_id", nullable = false)
     @Schema(description = "Capítulo ao qual esta página pertence")
     private Chapter chapter;

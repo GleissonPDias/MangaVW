@@ -1,6 +1,7 @@
 package senac.tsi.mangaVW.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -27,7 +28,7 @@ public class Genre {
 
 
     @ManyToMany(mappedBy = "genres")
-    @JsonIgnore
+    @JsonIgnoreProperties("genres")
     @Schema(description = "Lista de mangás que pertencem a este gênero")
     private List<Manga> mangas = new ArrayList<>();
 

@@ -1,6 +1,8 @@
 package senac.tsi.mangaVW.controllers;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
@@ -36,6 +38,10 @@ public class GenreController {
     }
 
     @Operation(summary = "Get all genres paginated")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Lista retornada com sucesso"),
+            @ApiResponse(responseCode = "400", description = "Parâmetros inválidos")
+    })
     @GetMapping
     public ResponseEntity<PagedModel<EntityModel<Genre>>> getAllGenres(@ParameterObject Pageable pageable) {
         var genres = genreRepository.findAll(pageable);
@@ -43,6 +49,10 @@ public class GenreController {
     }
 
     @Operation(summary = "Search genres by name")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Pesquisa realizada com sucesso"),
+            @ApiResponse(responseCode = "400", description = "URL de pesquisa inválida"),
+    })
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Genre>>> searchGenresByName(
             @RequestParam String name, @ParameterObject Pageable pageable) {
@@ -51,38 +61,81 @@ public class GenreController {
     }
 
     @Operation(summary = "Get a single genre by id")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Gênero encontrado com sucesso"),
+            @ApiResponse(responseCode = "400", description = "Formato de ID inválido"),
+            @ApiResponse(responseCode = "404", description = "Gênero não encontrado no banco de dados")
+    })
     @GetMapping("/{id}")
-    public EntityModel<Genre> getGenreById(@PathVariable long id) {
+    public ResponseEntity<EntityModel<Genre>> getGenreById(@PathVariable long id) {
         var genre = genreRepository.findById(id).orElseThrow(() -> new GenreNotFoundException(id));
-        return EntityModel.of(genre,
+        var entityModel = EntityModel.of(genre,
                 linkTo(methodOn(GenreController.class).getGenreById(id)).withSelfRel(),
                 linkTo(methodOn(GenreController.class).getAllGenres(Pageable.unpaged())).withRel("genres"));
+        return ResponseEntity.ok(entityModel);
     }
 
     @Operation(summary = "Create a new genre")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Gênero criado com sucesso no banco de dados"),
+            @ApiResponse(responseCode = "400", description = "JSON mal formatado"),
+            @ApiResponse(responseCode = "422", description = "Entidade não processável: Erro de validação dos campos")
+    })
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Envie somente o nome do gênero",
+            content = @io.swagger.v3.oas.annotations.media.Content(
+                    mediaType = "application/json",
+                    examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                            value = """
+                                    {
+                                      "name": "Romance"
+                                    }
+                                    """
+                    )
+            )
+    )
+
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<Genre> createGenre(@Valid @RequestBody Genre newGenre) {
         Genre savedGenre = genreRepository.save(newGenre);
         return ResponseEntity.created(URI.create("/genres/" + savedGenre.getId())).body(savedGenre);
     }
 
     @Operation(summary = "Update an existing genre")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "gênero atualizado com sucesso"),
+            @ApiResponse(responseCode = "400", description = "JSON inválido fornecido na requisição"),
+            @ApiResponse(responseCode = "404", description = "O gênero que você está tentando atualizar não existe")
+    })
+
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "Atualize o nome do gênero. Os mangás vinculados não são alterados por esta rota",
+            content = @io.swagger.v3.oas.annotations.media.Content(
+                    mediaType = "application/json",
+                    examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                            value = """
+                                    {
+                                      "name": "Terror"
+                                    }
+                                    """
+                    )
+            )
+    )
+
     @PutMapping("/{id}")
     public ResponseEntity<Genre> updateGenre(@PathVariable long id, @Valid @RequestBody Genre updatedGenre) {
         return genreRepository.findById(id).map(genre -> {
             genre.setName(updatedGenre.getName());
             return ResponseEntity.ok(genreRepository.save(genre));
-        }).orElseGet(() -> {
-            updatedGenre.setId(id);
-            return ResponseEntity.created(URI.create("/genres/" + id)).body(genreRepository.save(updatedGenre));
-        });
+        }).orElseThrow(() -> new GenreNotFoundException(id));
     }
 
     @Operation(summary = "Delete a genre")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteGenre(@PathVariable long id) {
-        if (!genreRepository.existsById(id)) return ResponseEntity.notFound().build();
+        if (!genreRepository.existsById(id)){
+            throw new GenreNotFoundException(id);
+        }
         genreRepository.deleteById(id);
         return ResponseEntity.noContent().build();
     }

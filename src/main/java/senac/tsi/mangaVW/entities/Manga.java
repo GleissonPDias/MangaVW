@@ -1,5 +1,6 @@
 package senac.tsi.mangaVW.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -17,15 +18,15 @@ public class Manga {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Schema(description = "ID único do mangá", example = "1")
-    private long id;
+    private Long id;
 
-    @NotNull
+
     @NotBlank
     @Size(min=1, max=255)
     @Schema(description = "Título do manga", example = "Berserk")
     private String title;
 
-    @NotNull
+
     @NotBlank
     @Size(min=1, max=255)
     @Schema(description = "Sinopse do manga", example = "Um jovem deliquente chamado Sakuragi se atrai por uma garota que o convida para entrar em um time de basquete...")
@@ -39,16 +40,19 @@ public class Manga {
 
     @OneToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "manga_details_id", referencedColumnName = "id")
+    @JsonIgnoreProperties("manga")
     @Schema(description = "Detalhes técnicos de publicação do mangá")
     private MangaDetails details;
 
     @NotNull(message = "O mangá precisa ter um autor vinculado")
     @ManyToOne
     @JoinColumn(name = "author_id", nullable = false)
+    @JsonIgnoreProperties("mangas")
     @Schema(description = "Autor responsável pela obra")
     private Author author;
 
     @OneToMany(mappedBy = "manga", cascade = CascadeType.ALL)
+    @JsonIgnoreProperties({"manga", "pages"})
     @Schema(description = "Lista de capítulos lançados para este mangá")
     private List<Chapter> chapters = new ArrayList<>();
 
@@ -59,6 +63,7 @@ public class Manga {
             joinColumns = @JoinColumn(name = "manga_id"), // A chave estrangeira desta classe (Manga)
             inverseJoinColumns = @JoinColumn(name = "genre_id") // A chave estrangeira da outra classe (Genre)
     )
+    @JsonIgnoreProperties("mangas")
     @Schema(description = "Lista de gêneros deste mangá")
     private List<Genre> genres = new ArrayList<>();
 
@@ -93,18 +98,18 @@ public class Manga {
         this.status = status;
     }
 
-    public Manga(long id, String title, String sinopsis, StatusPublication status) {
+    public Manga(Long id, String title, String sinopsis, StatusPublication status) {
         this.id = id;
         this.title = title;
         this.sinopsis = sinopsis;
         this.status = status;
     }
 
-    public long getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(long id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

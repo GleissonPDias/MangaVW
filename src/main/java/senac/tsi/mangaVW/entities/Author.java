@@ -2,6 +2,7 @@ package senac.tsi.mangaVW.entities;
 
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
@@ -19,22 +20,22 @@ public class Author {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Schema(description = "ID único do autor", example = "2")
-    private long id;
+    private Long id;
 
-    @NotNull
+
     @NotBlank
     @Size(min=1, max=50)
     @Schema(description = "Nome do autor", example = "Urasawa Naoki")
     private String name;
 
-    @NotNull
+
     @NotBlank
-    @Size(min=1, max=255)
+    @Column(columnDefinition = "TEXT")
     @Schema(description = "Biografia do autor", example = "Naoki nasceu no...")
     private String biography;
 
     @OneToMany(mappedBy = "author", cascade = CascadeType.ALL)
-    @JsonIgnore
+    @JsonIgnoreProperties("author")
     @Schema(description = "Lista de mangás escritos por este autor")
     private List<Manga> mangas = new ArrayList<>();
 
@@ -50,14 +51,14 @@ public class Author {
         this.biography = biography;
     }
 
-    public Author(long id, String name, String biography) {
+    public Author(Long id, String name, String biography) {
         this.id = id;
         this.name = name;
         this.biography = biography;
     }
 
-    public long getId() {return id;}
-    public void setId(long id) {this.id = id;}
+    public Long getId() {return id;}
+    public void setId(Long id) {this.id = id;}
     public String getName() {return name;}
     public void setName(String name) {this.name = name;}
     public String getBiography() {return biography;}
@@ -77,8 +78,8 @@ public class Author {
     public String toString() {
         return "Author{" +
                 "id=" + id +
-                ", name=" + name + '\'' +
-                ", biography=" + biography + '\'' +
+                ", name='" + name + '\'' +
+                ", biography='" + biography + '\'' +
                 '}';
     }
 }

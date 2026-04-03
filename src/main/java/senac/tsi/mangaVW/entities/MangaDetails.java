@@ -52,7 +52,7 @@ public class MangaDetails {
     public void setIsbn(String isbn) { this.isbn = isbn; }
     public int getPublicationYear() { return publicationYear; }
     public void setPublicationYear(int publicationYear) { this.publicationYear = publicationYear; }
-    public boolean getLicensed() { return licensed; }
+    public boolean isLicensed() { return licensed; }
     public void setLicensed(boolean licensed) { this.licensed = licensed; }
 
     @Override
@@ -73,8 +73,8 @@ public class MangaDetails {
         return "MangaDetails{" +
                 "id=" + id +
                 ", isbn='" + isbn + '\'' +
-                ", publicationYear ='" + publicationYear + '\'' +
-                ", licensed ='" + licensed + '\'' +
+                ", publicationYear =" + publicationYear +
+                ", licensed =" + licensed +
                 '}';
     }
 }

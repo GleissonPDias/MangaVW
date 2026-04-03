@@ -9,7 +9,7 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>senac.tsi</groupId>
-	<artifactId>books</artifactId>
+	<artifactId>mangas</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>books</name>
 	<description>Projeto de API para a turma do Senac de TSI</description>
