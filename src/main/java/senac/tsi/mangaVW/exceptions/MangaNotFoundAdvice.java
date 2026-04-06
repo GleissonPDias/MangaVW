@@ -1,6 +1,7 @@
 package senac.tsi.mangaVW.exceptions;
 
 import org.springframework.core.convert.ConversionFailedException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -50,5 +51,6 @@ public class MangaNotFoundAdvice {
     String mangaDetailsNotFoundHandler(MangaDetailsNotFoundException ex) {
         return ex.getMessage();
     }
+
 
 }

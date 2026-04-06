@@ -24,7 +24,7 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
 @Tag(name="authors", description = "Authors route")
 @RestController
-@RequestMapping("/authors") // Isso evita repetir "/authors" em todos os métodos!
+@RequestMapping("/authors")
 public class AuthorController {
 
     private final AuthorRepository authorRepository;
@@ -53,13 +53,12 @@ public class AuthorController {
             @ApiResponse(responseCode = "200", description = "Pesquisa realizada com sucesso"),
             @ApiResponse(responseCode = "400", description = "URL de pesquisa inválida"),
     })
-
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Author>>> searchAuthorsByName(
             @RequestParam String name,
             @ParameterObject Pageable pageable) {
         var authors = authorRepository.findByNameContainingIgnoreCase(name, pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(authors)); // Retorna 200 OK
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(authors));
     }
 
     @Operation(summary = "Get a single author by id")
@@ -69,13 +68,12 @@ public class AuthorController {
             @ApiResponse(responseCode = "404", description = "Autor não encontrado no banco de dados")
     })
     @GetMapping("/{id}")
-    public ResponseEntity <EntityModel<Author>> getAuthorById(@PathVariable long id) {
+    public ResponseEntity<EntityModel<Author>> getAuthorById(@PathVariable long id) {
         var author = authorRepository.findById(id)
-                .orElseThrow(() -> new AuthorNotFoundException(id)); // Retorna 404 via Advice se não achar
-        var entityModel = EntityModel.of(author,
-                linkTo(methodOn(AuthorController.class).getAuthorById(id)).withSelfRel(),
-                linkTo(methodOn(AuthorController.class).getAllAuthors(Pageable.unpaged())).withRel("authors"));
-        return ResponseEntity.ok(entityModel);
+                .orElseThrow(() -> new AuthorNotFoundException(id));
+
+        // Utilizando o método auxiliar para gerar os links
+        return ResponseEntity.ok(toEntityModel(author));
     }
 
     @Operation(summary = "Create a new author")
@@ -90,7 +88,7 @@ public class AuthorController {
                     examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
                             value = """
                                     {
-                                      "name": "Masashi Kudemorto",
+                                      "name": "Masashi Kishimoto",
                                       "biography": "Autor de renome, criador da franquia Naruto."
                                     }
                                     """
@@ -98,9 +96,13 @@ public class AuthorController {
             )
     )
     @PostMapping
-    public ResponseEntity<Author> createAuthor(@Valid @RequestBody Author newAuthor) {
+    public ResponseEntity<EntityModel<Author>> createAuthor(@Valid @RequestBody Author newAuthor) {
         Author savedAuthor = authorRepository.save(newAuthor);
-        return ResponseEntity.created(URI.create("/authors/" + savedAuthor.getId())).body(savedAuthor);
+
+        // Retorna o 201 Created junto com o EntityModel contendo os links
+        return ResponseEntity
+                .created(URI.create("/authors/" + savedAuthor.getId()))
+                .body(toEntityModel(savedAuthor));
     }
 
     @Operation(summary = "Update an existing author")
@@ -109,7 +111,6 @@ public class AuthorController {
             @ApiResponse(responseCode = "400", description = "JSON inválido fornecido na requisição"),
             @ApiResponse(responseCode = "404", description = "O autor que você está tentando atualizar não existe")
     })
-
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Atualize os dados do autor. Os mangás vinculados não são alterados por esta rota",
             content = @io.swagger.v3.oas.annotations.media.Content(
@@ -124,25 +125,37 @@ public class AuthorController {
                     )
             )
     )
-
     @PutMapping("/{id}")
-    public ResponseEntity<Author> updateAuthor(@PathVariable long id, @Valid @RequestBody Author updatedAuthor) {
+    public ResponseEntity<EntityModel<Author>> updateAuthor(@PathVariable long id, @Valid @RequestBody Author updatedAuthor) {
         return authorRepository.findById(id).map(author -> {
             author.setName(updatedAuthor.getName());
             author.setBiography(updatedAuthor.getBiography());
-            return ResponseEntity.ok(authorRepository.save(author)); // Retorna 200 OK se atualizou
+
+            Author savedAuthor = authorRepository.save(author);
+
+            // Retorna o 200 OK junto com o EntityModel contendo os links atualizados
+            return ResponseEntity.ok(toEntityModel(savedAuthor));
+
         }).orElseThrow(() -> new AuthorNotFoundException(id));
-
-
     }
 
     @Operation(summary = "Delete an author")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteAuthor(@PathVariable long id) {
         if (!authorRepository.existsById(id)) {
-            throw new AuthorNotFoundException(id); // Retorna 404 Not Found se tentar deletar algo que não existe
+            throw new AuthorNotFoundException(id);
         }
         authorRepository.deleteById(id);
-        return ResponseEntity.noContent().build(); // Retorna 204 No Content se deletou com sucesso
+        return ResponseEntity.noContent().build();
+    }
+
+    // --- MÉTODO AUXILIAR PARA HATEOAS ---
+    // Centraliza a criação dos links, evitando repetição de código no GET, POST e PUT
+    private EntityModel<Author> toEntityModel(Author author) {
+        return EntityModel.of(author,
+                linkTo(methodOn(AuthorController.class).getAuthorById(author.getId())).withSelfRel(),
+                linkTo(methodOn(AuthorController.class).updateAuthor(author.getId(), null)).withRel("update"),
+                linkTo(methodOn(AuthorController.class).deleteAuthor(author.getId())).withRel("delete"),
+                linkTo(methodOn(AuthorController.class).getAllAuthors(Pageable.unpaged())).withRel("authors"));
     }
 }

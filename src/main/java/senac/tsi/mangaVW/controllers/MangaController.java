@@ -3,7 +3,6 @@ package senac.tsi.mangaVW.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
-import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -59,7 +58,7 @@ public class MangaController {
     }
 
     @Tag(name = "Search")
-    @Operation(summary = "Search mangas by title", description = "Busca paginada de mangás contendo um título específico.")
+    @Operation(summary = "Search mangas by title", description = "Paginated search for mangas containing a specific title.")
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Manga>>> searchMangasByTitle(
             @RequestParam String title,
@@ -69,22 +68,22 @@ public class MangaController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(mangas));
     }
 
-    @Operation(summary = "Sync mangas from MangaDex API", description = "Importa mangás da API pública do MangaDex.")
+    @Operation(summary = "Sync mangas from MangaDex API", description = "Imports mangas from the public MangaDex API.")
     @PostMapping("/sync")
     public ResponseEntity<String> syncFromMangaDex() {
         try {
             mangaDexService.syncMangasFromMangaDex();
-            return ResponseEntity.ok("Sincronização com MangaDex concluída com sucesso!");
+            return ResponseEntity.ok("Sync with MangaDex completed successfully!");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Erro ao sincronizar com MangaDex: " + e.getMessage());
+                    .body("Error syncing with MangaDex: " + e.getMessage());
         }
     }
 
-    @Operation(summary = "Get all mangas")
+    @Operation(summary = "Get all mangas paginated")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Lista retornada com sucesso"),
-            @ApiResponse(responseCode = "400", description = "Parâmetros inválidos")
+            @ApiResponse(responseCode = "200", description = "List returned successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid parameters")
     })
     @GetMapping
     public ResponseEntity<PagedModel<EntityModel<Manga>>> getAllMangas(@ParameterObject Pageable pageable){
@@ -94,30 +93,26 @@ public class MangaController {
 
     @Operation(summary = "Get a single manga by id")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Manga encontrado com sucesso"),
-            @ApiResponse(responseCode = "400", description = "ID inválido"),
-            @ApiResponse(responseCode = "404", description = "Manga não encontrado")
+            @ApiResponse(responseCode = "200", description = "Manga found successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
+            @ApiResponse(responseCode = "404", description = "Manga not found")
     })
     @GetMapping("/{id}")
     public ResponseEntity<EntityModel<Manga>> getMangaById(@PathVariable long id){
         var manga = mangaRepository.findById(id)
                 .orElseThrow(() -> new MangaNotFoundException(id));
 
-        var entityModel = EntityModel.of(manga,
-                linkTo(methodOn(MangaController.class).getMangaById(id)).withSelfRel(),
-                linkTo(methodOn(MangaController.class).getAllMangas(Pageable.unpaged())).withRel("mangas"));
-
-        return ResponseEntity.ok(entityModel);
+        return ResponseEntity.ok(toEntityModel(manga));
     }
 
     @Operation(summary = "Create a new manga")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Manga criado com sucesso"),
-            @ApiResponse(responseCode = "400", description = "Dados inválidos fornecidos"),
-            @ApiResponse(responseCode = "404", description = "Autor ou Gênero informado não existe")
+            @ApiResponse(responseCode = "201", description = "Manga created successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid data provided"),
+            @ApiResponse(responseCode = "404", description = "Author or Genre provided does not exist")
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Dados do mangá. É obrigatório informar o ID do Autor. Gêneros e Detalhes são opcionais.",
+            description = "Manga data. Author ID is mandatory. Genres and Details are optional.",
             content = @Content(mediaType = "application/json",
                     examples = @ExampleObject(value = """
                             {
@@ -137,14 +132,14 @@ public class MangaController {
                             }
                             """)))
     @PostMapping
-    public ResponseEntity<Manga> createManga(@Valid @RequestBody Manga newManga){
+    public ResponseEntity<EntityModel<Manga>> createManga(@Valid @RequestBody Manga newManga){
 
         // 1. Busca e valida o Autor
         if (newManga.getAuthor() == null || newManga.getAuthor().getId() == null) {
             return ResponseEntity.badRequest().build();
         }
         Author author = authorRepository.findById(newManga.getAuthor().getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Autor não encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Author not found"));
         newManga.setAuthor(author);
 
         // 2. Busca e valida a lista de Gêneros (se for enviada)
@@ -152,7 +147,7 @@ public class MangaController {
             List<Genre> fetchedGenres = new ArrayList<>();
             for (Genre g : newManga.getGenres()) {
                 Genre foundGenre = genreRepository.findById(g.getId())
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Gênero não encontrado: ID " + g.getId()));
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Genre not found: ID " + g.getId()));
                 fetchedGenres.add(foundGenre);
             }
             newManga.setGenres(fetchedGenres);
@@ -161,17 +156,17 @@ public class MangaController {
         Manga savedManga = mangaRepository.save(newManga);
         return ResponseEntity
                 .created(URI.create("/mangas/"+ savedManga.getId()))
-                .body(savedManga);
+                .body(toEntityModel(savedManga));
     }
 
     @Operation(summary = "Update an existing manga")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Manga atualizado com sucesso"),
-            @ApiResponse(responseCode = "400", description = "Dados inválidos"),
-            @ApiResponse(responseCode = "404", description = "Manga ou relacionamentos não encontrados")
+            @ApiResponse(responseCode = "200", description = "Manga updated successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid data"),
+            @ApiResponse(responseCode = "404", description = "Manga or relationships not found")
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Atualize os dados. Mande o ID do autor para manter/trocar o vínculo.",
+            description = "Update the data. Send the author ID to maintain/change the link.",
             content = @Content(mediaType = "application/json",
                     examples = @ExampleObject(value = """
                             {
@@ -191,7 +186,7 @@ public class MangaController {
                             }
                             """)))
     @PutMapping("/{id}")
-    public ResponseEntity<Manga> updateManga(@PathVariable long id, @Valid @RequestBody Manga updatedManga){
+    public ResponseEntity<EntityModel<Manga>> updateManga(@PathVariable long id, @Valid @RequestBody Manga updatedManga){
         return mangaRepository.findById(id).map(manga -> {
 
             // Atualiza dados básicos
@@ -202,7 +197,7 @@ public class MangaController {
             // Valida e atualiza Autor
             if (updatedManga.getAuthor() != null && updatedManga.getAuthor().getId() != null) {
                 Author author = authorRepository.findById(updatedManga.getAuthor().getId())
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Autor não encontrado"));
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Author not found"));
                 manga.setAuthor(author);
             }
 
@@ -211,7 +206,7 @@ public class MangaController {
                 List<Genre> fetchedGenres = new ArrayList<>();
                 for (Genre g : updatedManga.getGenres()) {
                     Genre foundGenre = genreRepository.findById(g.getId())
-                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Gênero não encontrado: ID " + g.getId()));
+                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Genre not found: ID " + g.getId()));
                     fetchedGenres.add(foundGenre);
                 }
                 manga.setGenres(fetchedGenres);
@@ -225,15 +220,16 @@ public class MangaController {
                 }
             }
 
-            return ResponseEntity.ok(mangaRepository.save(manga));
+            Manga savedManga = mangaRepository.save(manga);
+            return ResponseEntity.ok(toEntityModel(savedManga));
 
         }).orElseThrow(() -> new MangaNotFoundException(id));
     }
 
     @Operation(summary = "Delete a manga")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Deletado com sucesso"),
-            @ApiResponse(responseCode = "404", description = "Mangá não encontrado")
+            @ApiResponse(responseCode = "204", description = "Deleted successfully"),
+            @ApiResponse(responseCode = "404", description = "Manga not found")
     })
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteManga(@PathVariable long id){
@@ -242,5 +238,14 @@ public class MangaController {
         }
         mangaRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // --- HELPER METHOD FOR HATEOAS ---
+    private EntityModel<Manga> toEntityModel(Manga manga) {
+        return EntityModel.of(manga,
+                linkTo(methodOn(MangaController.class).getMangaById(manga.getId())).withSelfRel(),
+                linkTo(methodOn(MangaController.class).updateManga(manga.getId(), null)).withRel("update"),
+                linkTo(methodOn(MangaController.class).deleteManga(manga.getId())).withRel("delete"),
+                linkTo(methodOn(MangaController.class).getAllMangas(Pageable.unpaged())).withRel("mangas"));
     }
 }

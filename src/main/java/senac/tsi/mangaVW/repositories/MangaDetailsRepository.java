@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import senac.tsi.mangaVW.entities.MangaDetails;
 
 public interface MangaDetailsRepository extends JpaRepository<MangaDetails, Long> {
-    Page<MangaDetails> findByLicensedTrue(Pageable pageable);
+    Page<MangaDetails> findByLicensed(Boolean licensed, Pageable pageable);
 }

@@ -1,6 +1,8 @@
 package senac.tsi.mangaVW.controllers;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -11,7 +13,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PagedResourcesAssembler;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.PagedModel;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import senac.tsi.mangaVW.entities.Chapter;
@@ -44,8 +45,8 @@ public class ChapterController {
 
     @Operation(summary = "Get all chapters paginated")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Lista retornada com sucesso"),
-            @ApiResponse(responseCode = "400", description = "Parâmetros inválidos")
+            @ApiResponse(responseCode = "200", description = "List returned successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid parameters")
     })
     @GetMapping
     public ResponseEntity<PagedModel<EntityModel<Chapter>>> getAllChapters(@ParameterObject Pageable pageable) {
@@ -53,14 +54,11 @@ public class ChapterController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(chapters));
     }
 
-
     @Operation(summary = "Search chapters by language")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Pesquisa realizada com sucesso"),
-            @ApiResponse(responseCode = "400", description = "URL de pesquisa inválida"),
+            @ApiResponse(responseCode = "200", description = "Search completed successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid search URL"),
     })
-
-
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Chapter>>> searchChaptersByLanguage(
             @RequestParam String language, @ParameterObject Pageable pageable) {
@@ -70,32 +68,31 @@ public class ChapterController {
 
     @Operation(summary = "Get a single chapter by id")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Capítulo encontrada com sucesso"),
-            @ApiResponse(responseCode = "400", description = "Formato de ID inválido"),
-            @ApiResponse(responseCode = "404", description = "Página não encontrada no banco de dados")
+            @ApiResponse(responseCode = "200", description = "Chapter found successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
+            @ApiResponse(responseCode = "404", description = "Chapter not found in the database")
     })
     @GetMapping("/{id}")
     public ResponseEntity<EntityModel<Chapter>> getChapterById(@PathVariable long id) {
         var chapter = chapterRepository.findById(id).orElseThrow(() -> new ChapterNotFoundException(id));
-        var entityModel = EntityModel.of(chapter,
-                linkTo(methodOn(ChapterController.class).getChapterById(id)).withSelfRel(),
-                linkTo(methodOn(ChapterController.class).getAllChapters(Pageable.unpaged())).withRel("chapters"));
-        return ResponseEntity.ok(entityModel);
+
+        // Utilizando o método auxiliar para HATEOAS
+        return ResponseEntity.ok(toEntityModel(chapter));
     }
 
     @Operation(summary = "Create a new chapter")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Chapter criada com sucesso no banco de dados"),
-            @ApiResponse(responseCode = "400", description = "JSON mal formatado ou faltando o ID do Mangá"),
-            @ApiResponse(responseCode = "404", description = "O Mangá informado não existe no banco de dados"),
-            @ApiResponse(responseCode = "409", description = "Conflito: o capítulo já existe neste mangá"),
-            @ApiResponse(responseCode = "422", description = "Entidade não processável: Erro de validação dos campos")
+            @ApiResponse(responseCode = "201", description = "Chapter created successfully in the database"),
+            @ApiResponse(responseCode = "400", description = "Malformed JSON or missing Manga ID"),
+            @ApiResponse(responseCode = "404", description = "The provided Manga does not exist in the database"),
+            @ApiResponse(responseCode = "409", description = "Conflict: the chapter already exists in this manga"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Envie os dados da capítulo e apenas o ID do mangá desejado",
-            content = @io.swagger.v3.oas.annotations.media.Content(
+            description = "Send chapter data and only the desired manga ID",
+            content = @Content(
                     mediaType = "application/json",
-                    examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                    examples = @ExampleObject(
                             value = """
                                     {
                                       "chapterNumber": 10.5,
@@ -108,9 +105,8 @@ public class ChapterController {
                     )
             )
     )
-
     @PostMapping
-    public ResponseEntity<Chapter> createChapter(@Valid @RequestBody Chapter newChapter) {
+    public ResponseEntity<EntityModel<Chapter>> createChapter(@Valid @RequestBody Chapter newChapter) {
         if(newChapter.getManga() == null || newChapter.getManga().getId() == null) {
             return ResponseEntity.badRequest().build();
         }
@@ -121,24 +117,23 @@ public class ChapterController {
 
         Chapter savedChapter = chapterRepository.save(newChapter);
 
+        // Retorna o 201 Created junto com o EntityModel contendo os links (e a URI corrigida para plural)
         return ResponseEntity
-                .created(URI.create("/chapter/" + savedChapter.getId()))
-                .body(savedChapter);
+                .created(URI.create("/chapters/" + savedChapter.getId()))
+                .body(toEntityModel(savedChapter));
     }
-
-
 
     @Operation(summary = "Update an existing chapter")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Capítulo atualizado com sucesso"),
-            @ApiResponse(responseCode = "400", description = "JSON inválido fornecido na requisição"),
-            @ApiResponse(responseCode = "404", description = "O capítulo que você está tentando atualizar não existe")
+            @ApiResponse(responseCode = "200", description = "Chapter updated successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid JSON provided in the request"),
+            @ApiResponse(responseCode = "404", description = "The chapter you are trying to update does not exist")
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Envie apenas os campos da página que serão atualizados (o vínculo com o mangá não é alterado por aqui).",
-            content = @io.swagger.v3.oas.annotations.media.Content(
+            description = "Send only the chapter fields to be updated (the link with the manga is not changed here).",
+            content = @Content(
                     mediaType = "application/json",
-                    examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                    examples = @ExampleObject(
                             value = """
                                     {
                                        "chapterNumber": 1,
@@ -148,22 +143,24 @@ public class ChapterController {
                     )
             )
     )
-
     @PutMapping("/{id}")
-    public ResponseEntity<Chapter> updateChapter(@PathVariable long id, @Valid @RequestBody Chapter updatedChapter) {
+    public ResponseEntity<EntityModel<Chapter>> updateChapter(@PathVariable long id, @Valid @RequestBody Chapter updatedChapter) {
         return chapterRepository.findById(id).map(chapter -> {
             chapter.setChapterNumber(updatedChapter.getChapterNumber());
             chapter.setLanguage(updatedChapter.getLanguage());
-            return ResponseEntity.ok(chapterRepository.save(chapter));
-        }).orElseThrow(() -> new ChapterNotFoundException(id));
 
+            Chapter savedChapter = chapterRepository.save(chapter);
+
+            // Retorna o 200 OK com HATEOAS
+            return ResponseEntity.ok(toEntityModel(savedChapter));
+        }).orElseThrow(() -> new ChapterNotFoundException(id));
     }
 
     @Operation(summary = "Delete a chapter")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Deletado com sucesso!"),
-            @ApiResponse(responseCode = "400", description = "Formato de ID inválido"),
-            @ApiResponse(responseCode = "404", description = "O capítulo informada não existe no banco de dados"),
+            @ApiResponse(responseCode = "204", description = "Deleted successfully!"),
+            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
+            @ApiResponse(responseCode = "404", description = "The informed chapter does not exist in the database"),
     })
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteChapter(@PathVariable long id) {
@@ -172,5 +169,14 @@ public class ChapterController {
         }
         chapterRepository.deleteById(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // --- MÉTODO AUXILIAR PARA HATEOAS ---
+    private EntityModel<Chapter> toEntityModel(Chapter chapter) {
+        return EntityModel.of(chapter,
+                linkTo(methodOn(ChapterController.class).getChapterById(chapter.getId())).withSelfRel(),
+                linkTo(methodOn(ChapterController.class).updateChapter(chapter.getId(), null)).withRel("update"),
+                linkTo(methodOn(ChapterController.class).deleteChapter(chapter.getId())).withRel("delete"),
+                linkTo(methodOn(ChapterController.class).getAllChapters(Pageable.unpaged())).withRel("chapters"));
     }
 }
