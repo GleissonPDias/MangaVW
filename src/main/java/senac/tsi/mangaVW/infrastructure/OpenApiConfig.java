@@ -13,16 +13,30 @@ import org.springframework.web.method.HandlerMethod;
 @Configuration
 @OpenAPIDefinition(
         info = @Info(
-                title = "Your API Title",
+                title = "MangaVW API",
                 version = "1.0.0",
-                description = "A description of your API.",
+                description = """
+                        **RESTful API for Comprehensive Manga Catalog Management.**
+                        
+                        This project was developed as a requirement for the TSI course at Senac, applying advanced data modeling and strict REST architectural best practices.
+                        
+                        ### 🚀 Key Features
+                        * **Richardson Maturity Model Level 3:** Full HATEOAS implementation for resource discoverability.
+                        * **Pagination:** Optimized data retrieval using Spring Data Pageable.
+                        * **External Integration:** Automated background synchronization with the official MangaDex API.
+                        * **Relational Integrity:** Complex One-To-One, One-To-Many, and Many-To-Many mappings managed by Hibernate.
+                        
+                        ### 🛠️ Tech Stack
+                        **Java 17** | **Spring Boot 3** | **Spring Data JPA** | **H2 Database** | **Springdoc OpenAPI**
+                        """,
                 contact = @Contact(
-                        name = "Your Name",
-                        email = "your.email@example.com"
+                        name = "Gleisson",
+                        url = "https://github.com/GleissonPDias",
+                        email = "gleisson.gpd10@gmail.com"
                 ),
                 license = @License(
                         name = "MIT License",
-                        url = "https://opensource.org" // URL to the MIT license
+                        url = "https://opensource.org/licenses/MIT"
                 )
         )
 )

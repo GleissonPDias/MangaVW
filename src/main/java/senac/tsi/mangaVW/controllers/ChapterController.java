@@ -27,7 +27,7 @@ import java.net.URI;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
-@Tag(name="chapters", description = "Chapters route")
+@Tag(name = "Chapters", description = "Endpoints for managing the episodic chapter structure of mangas")
 @RestController
 @RequestMapping("/chapters")
 public class ChapterController {
@@ -43,7 +43,7 @@ public class ChapterController {
         this.mangaRepository = mangaRepository;
     }
 
-    @Operation(summary = "Get all chapters paginated")
+    @Operation(summary = "Get all chapters", description = "Retrieves a paginated list of all chapters across all mangas in the system.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List returned successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid parameters")
@@ -54,7 +54,7 @@ public class ChapterController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(chapters));
     }
 
-    @Operation(summary = "Search chapters by language")
+    @Operation(summary = "Search chapters by language", description = "Filters and returns a paginated list of chapters that match the specified language code (e.g., 'en', 'pt-br').")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Search completed successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid search URL"),
@@ -66,7 +66,7 @@ public class ChapterController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(chapters));
     }
 
-    @Operation(summary = "Get a single chapter by id")
+    @Operation(summary = "Get chapter by ID", description = "Retrieves a specific chapter's information by its unique identifier, enabling access to its associated reading pages.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Chapter found successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
@@ -80,7 +80,7 @@ public class ChapterController {
         return ResponseEntity.ok(toEntityModel(chapter));
     }
 
-    @Operation(summary = "Create a new chapter")
+    @Operation(summary = "Create a new chapter", description = "Registers a new chapter and links it to an existing manga. The manga ID must be provided in the request body.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Chapter created successfully in the database"),
             @ApiResponse(responseCode = "400", description = "Malformed JSON or missing Manga ID"),
@@ -123,7 +123,7 @@ public class ChapterController {
                 .body(toEntityModel(savedChapter));
     }
 
-    @Operation(summary = "Update an existing chapter")
+    @Operation(summary = "Update a chapter", description = "Updates the chapter number or language. The relationship to its parent manga remains unchanged.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Chapter updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid JSON provided in the request"),
@@ -156,7 +156,7 @@ public class ChapterController {
         }).orElseThrow(() -> new ChapterNotFoundException(id));
     }
 
-    @Operation(summary = "Delete a chapter")
+    @Operation(summary = "Delete a chapter", description = "Deletes a chapter from the database. Any pages exclusively associated with this chapter will be deleted in cascade.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Deleted successfully!"),
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),

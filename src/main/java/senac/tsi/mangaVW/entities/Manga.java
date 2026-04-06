@@ -17,23 +17,23 @@ public class Manga {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Schema(description = "ID único do mangá", example = "1")
+    @Schema(description = "Unique identifier of the manga", example = "1")
     private Long id;
 
 
     @NotBlank
     @Size(min=1, max=255)
-    @Schema(description = "Título do manga", example = "Berserk")
+    @Schema(description = "Title of the manga", example = "Berserk")
     private String title;
 
 
     @NotBlank
     @Size(min=1, max=255)
-    @Schema(description = "Sinopse do manga", example = "Um jovem deliquente chamado Sakuragi se atrai por uma garota que o convida para entrar em um time de basquete...")
+    @Schema(description = "Synopsis of the manga", example = "Um jovem deliquente chamado Sakuragi...")
     private String sinopsis;
 
     @NotNull
-    @Schema(description = "Status de publicação do mangá", example = "FINALIZADO")
+    @Schema(description = "Publication status of the manga", example = "FINALIZADO")
     @Enumerated(EnumType.STRING)
     private StatusPublication status;
 

@@ -22,7 +22,7 @@ import java.net.URI;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
-@Tag(name="authors", description = "Authors route")
+@Tag(name = "Authors", description = "Endpoints for managing manga authors and their biographical data")
 @RestController
 @RequestMapping("/authors")
 public class AuthorController {
@@ -37,18 +37,19 @@ public class AuthorController {
         this.pagedResourcesAssembler = pagedResourcesAssembler;
     }
 
-    @Operation(summary = "Get all authors paginated")
+    @Operation(summary = "Get all authors", description = "Retrieves a paginated list of all registered authors in the database. Includes embedded HATEOAS links for navigation.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Lista retornada com sucesso"),
             @ApiResponse(responseCode = "400", description = "Parâmetros inválidos")
     })
     @GetMapping
+
     public ResponseEntity<PagedModel<EntityModel<Author>>> getAllAuthors(@ParameterObject Pageable pageable) {
         var authors = authorRepository.findAll(pageable);
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(authors));
     }
 
-    @Operation(summary = "Search authors by name")
+    @Operation(summary = "Search authors by name", description = "Performs a case-insensitive search for authors matching the provided name keyword. Returns a paginated response.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Pesquisa realizada com sucesso"),
             @ApiResponse(responseCode = "400", description = "URL de pesquisa inválida"),
@@ -61,7 +62,7 @@ public class AuthorController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(authors));
     }
 
-    @Operation(summary = "Get a single author by id")
+    @Operation(summary = "Get author by ID", description = "Retrieves the detailed profile of a specific author using their unique identifier. Includes self, update, and delete HATEOAS links.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Autor encontrado com sucesso"),
             @ApiResponse(responseCode = "400", description = "Formato de ID inválido"),
@@ -76,7 +77,7 @@ public class AuthorController {
         return ResponseEntity.ok(toEntityModel(author));
     }
 
-    @Operation(summary = "Create a new author")
+    @Operation(summary = "Create a new author", description = "Registers a new author in the system. Requires a valid name and biography. Returns the created resource location.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Autor criado com sucesso no banco de dados"),
             @ApiResponse(responseCode = "422", description = "Entidade não processável: Erro de validação dos campos")
@@ -105,7 +106,7 @@ public class AuthorController {
                 .body(toEntityModel(savedAuthor));
     }
 
-    @Operation(summary = "Update an existing author")
+    @Operation(summary = "Update an author", description = "Updates the biographical information of an existing author. Linked mangas are preserved and not affected by this operation.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Autor atualizado com sucesso"),
             @ApiResponse(responseCode = "400", description = "JSON inválido fornecido na requisição"),
@@ -139,7 +140,7 @@ public class AuthorController {
         }).orElseThrow(() -> new AuthorNotFoundException(id));
     }
 
-    @Operation(summary = "Delete an author")
+    @Operation(summary = "Delete an author", description = "Permanently removes an author from the database. Due to database constraints, associated entities may be affected based on cascade rules.")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteAuthor(@PathVariable long id) {
         if (!authorRepository.existsById(id)) {

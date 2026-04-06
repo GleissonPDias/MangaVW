@@ -27,7 +27,7 @@ import java.net.URI;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
-@Tag(name="pages", description = "Pages route")
+@Tag(name = "Pages", description = "Endpoints for managing individual reading pages and image URLs")
 @RestController
 @RequestMapping("/pages")
 public class PageController {
@@ -43,7 +43,7 @@ public class PageController {
         this.chapterRepository = chapterRepository;
     }
 
-    @Operation(summary = "Get all pages paginated")
+    @Operation(summary = "Get all pages", description = "Retrieves a paginated list of all reading pages currently stored in the system.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List returned successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid parameters")
@@ -54,7 +54,7 @@ public class PageController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(pages));
     }
 
-    @Operation(summary = "Search pages by image URL")
+    @Operation(summary = "Search pages by image URL", description = "Finds pages based on a partial match of their image URL. Useful for tracing specific image hosts.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Search completed successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid search URL"),
@@ -66,7 +66,7 @@ public class PageController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(pages));
     }
 
-    @Operation(summary = "Get a single page by id")
+    @Operation(summary = "Get page by ID", description = "Retrieves a single page object, providing its display order number and the source image URL.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Page found successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
@@ -78,7 +78,7 @@ public class PageController {
         return ResponseEntity.ok(toEntityModel(page));
     }
 
-    @Operation(summary = "Create a new page")
+    @Operation(summary = "Create a new page", description = "Adds a new page to an existing chapter. Requires the chapter ID and a valid image URL.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Page created successfully in the database"),
             @ApiResponse(responseCode = "400", description = "Malformed JSON or missing Chapter ID"),
@@ -115,7 +115,7 @@ public class PageController {
                 .body(toEntityModel(savedPage));
     }
 
-    @Operation(summary = "Update an existing page")
+    @Operation(summary = "Update a page", description = "Updates the page sequence number or the image URL for an existing page.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Page updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid JSON provided"),
@@ -141,7 +141,7 @@ public class PageController {
         }).orElseThrow(() -> new PageNotFoundException(id)) ;
     }
 
-    @Operation(summary = "Delete a page")
+    @Operation(summary = "Delete a page", description = "Removes a specific page from its chapter. This action is irreversible.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Deleted successfully!"),
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),

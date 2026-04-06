@@ -26,7 +26,7 @@ import java.util.List;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
-@Tag(name="genres", description = "Genres route")
+@Tag(name = "Genres", description = "Endpoints for categorizing mangas into literary genres")
 @RestController
 @RequestMapping("/genres")
 public class GenreController {
@@ -44,7 +44,7 @@ public class GenreController {
         this.mangaRepository = mangaRepository;
     }
 
-    @Operation(summary = "Get all genres paginated")
+    @Operation(summary = "Get all genres", description = "Retrieves a paginated list of all available genres in the system.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List returned successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid parameters")
@@ -55,7 +55,7 @@ public class GenreController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(genres));
     }
 
-    @Operation(summary = "Search genres by name")
+    @Operation(summary = "Search genres by name", description = "Performs a case-insensitive search to find specific genres based on keywords.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Search completed successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid search URL"),
@@ -67,7 +67,7 @@ public class GenreController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(genres));
     }
 
-    @Operation(summary = "Get a single genre by id")
+    @Operation(summary = "Get genre by ID", description = "Retrieves a genre by its ID. Includes HATEOAS links to manage the resource.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Genre found successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
@@ -79,7 +79,7 @@ public class GenreController {
         return ResponseEntity.ok(toEntityModel(genre));
     }
 
-    @Operation(summary = "Create a new genre")
+    @Operation(summary = "Create a new genre", description = "Registers a new genre classification. The name must be unique and properly formatted.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Genre created successfully in the database"),
             @ApiResponse(responseCode = "400", description = "Malformed JSON"),
@@ -106,7 +106,7 @@ public class GenreController {
                 .body(toEntityModel(savedGenre));
     }
 
-    @Operation(summary = "Update an existing genre")
+    @Operation(summary = "Update a genre", description = "Modifies the name of an existing genre. Mangas previously associated with this genre will automatically reflect the new name.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Genre updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid JSON provided in the request"),
@@ -134,7 +134,7 @@ public class GenreController {
         }).orElseThrow(() -> new GenreNotFoundException(id));
     }
 
-    @Operation(summary = "Delete a genre")
+    @Operation(summary = "Delete a genre", description = "Safely deletes a genre. Automatically unlinks the genre from any associated mangas before deletion to prevent data integrity conflicts.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Deleted successfully!"),
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),

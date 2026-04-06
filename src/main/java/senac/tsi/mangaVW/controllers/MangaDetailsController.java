@@ -25,7 +25,7 @@ import java.net.URI;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
-@Tag(name="manga-details", description = "Manga details and technical operations route")
+@Tag(name = "Manga Details", description = "Endpoints for managing technical publishing metadata")
 @RestController
 @RequestMapping("/manga-details")
 public class MangaDetailsController {
@@ -43,14 +43,14 @@ public class MangaDetailsController {
         this.mangaRepository = mangaRepository;
     }
 
-    @Operation(summary = "Get all manga details paginated")
+    @Operation(summary = "Get all manga details", description = "Retrieves a paginated list of all technical metadata records (ISBN, publication year, etc.).")
     @GetMapping
     public ResponseEntity<PagedModel<EntityModel<MangaDetails>>> getAllDetails(@ParameterObject Pageable pageable) {
         var details = detailsRepository.findAll(pageable);
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(details));
     }
 
-    @Operation(summary = "Search manga details by license status")
+    @Operation(summary = "Search by license status", description = "Filters the technical details based on their official licensing status (true for licensed, false for unlicensed).")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Search completed successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid search parameters"),
@@ -62,7 +62,7 @@ public class MangaDetailsController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(details));
     }
 
-    @Operation(summary = "Get a single manga detail by id")
+    @Operation(summary = "Get details by ID", description = "Retrieves a specific technical details record using its unique identifier.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Manga details found successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
@@ -76,7 +76,7 @@ public class MangaDetailsController {
         return ResponseEntity.ok(toEntityModel(details));
     }
 
-    @Operation(summary = "Create new manga details")
+    @Operation(summary = "Create manga details", description = "Creates a standalone technical details record which can later be attached to a manga entity.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Manga details created successfully"),
             @ApiResponse(responseCode = "400", description = "Malformed JSON"),
@@ -101,7 +101,7 @@ public class MangaDetailsController {
                 .body(toEntityModel(savedDetails));
     }
 
-    @Operation(summary = "Update existing manga details")
+    @Operation(summary = "Update manga details", description = "Updates the ISBN, publication year, or licensing status of an existing details record.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Manga details updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid JSON provided"),
@@ -130,7 +130,7 @@ public class MangaDetailsController {
         }).orElseThrow(() -> new MangaDetailsNotFoundException(id));
     }
 
-    @Operation(summary = "Delete manga details")
+    @Operation(summary = "Delete manga details", description = "Safely deletes a details record. If currently linked to a manga, the relationship is automatically severed before deletion to avoid conflicts.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Deleted successfully"),
             @ApiResponse(responseCode = "404", description = "Manga details not found")

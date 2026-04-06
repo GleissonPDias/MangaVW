@@ -33,7 +33,7 @@ import java.util.List;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 
-@Tag(name="mangas", description = "Mangas route")
+@Tag(name = "Mangas", description = "Core endpoints for managing the manga catalog and synchronization")
 @RestController
 @RequestMapping("/mangas")
 public class MangaController {
@@ -57,8 +57,7 @@ public class MangaController {
         this.genreRepository = genreRepository;
     }
 
-    @Tag(name = "Search")
-    @Operation(summary = "Search mangas by title", description = "Paginated search for mangas containing a specific title.")
+    @Operation(summary = "Search mangas by title", description = "Performs a paginated, case-insensitive search for mangas containing the specified title keyword.")
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Manga>>> searchMangasByTitle(
             @RequestParam String title,
@@ -68,7 +67,7 @@ public class MangaController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(mangas));
     }
 
-    @Operation(summary = "Sync mangas from MangaDex API", description = "Imports mangas from the public MangaDex API.")
+    @Operation(summary = "Sync mangas from MangaDex API", description = "Triggers an automated background process to fetch external manga data (titles, authors, cover arts, genres) from the public MangaDex API and saves them to the local database.")
     @PostMapping("/sync")
     public ResponseEntity<String> syncFromMangaDex() {
         try {
@@ -80,7 +79,7 @@ public class MangaController {
         }
     }
 
-    @Operation(summary = "Get all mangas paginated")
+    @Operation(summary = "Get all mangas", description = "Retrieves a comprehensive, paginated list of all mangas available in the catalog, including their related entities (Author, Details).")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List returned successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid parameters")
@@ -91,7 +90,7 @@ public class MangaController {
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(mangas));
     }
 
-    @Operation(summary = "Get a single manga by id")
+    @Operation(summary = "Get manga by ID", description = "Retrieves full details of a specific manga by its unique ID. The response is enriched with HATEOAS links for resource discoverability.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Manga found successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
@@ -105,7 +104,7 @@ public class MangaController {
         return ResponseEntity.ok(toEntityModel(manga));
     }
 
-    @Operation(summary = "Create a new manga")
+    @Operation(summary = "Create a new manga", description = "Adds a new manga to the catalog. Requires an existing Author ID. Genres and technical details can be optionally linked during creation.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Manga created successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid data provided"),
@@ -159,7 +158,7 @@ public class MangaController {
                 .body(toEntityModel(savedManga));
     }
 
-    @Operation(summary = "Update an existing manga")
+    @Operation(summary = "Update a manga", description = "Updates the core metadata of an existing manga. Relationships with authors, genres, and details can be modified by providing their respective IDs.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Manga updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid data"),
@@ -226,7 +225,7 @@ public class MangaController {
         }).orElseThrow(() -> new MangaNotFoundException(id));
     }
 
-    @Operation(summary = "Delete a manga")
+    @Operation(summary = "Delete a manga", description = "Permanently deletes a manga. All associated chapters, pages, and technical details will be cascaded and deleted automatically.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Deleted successfully"),
             @ApiResponse(responseCode = "404", description = "Manga not found")
