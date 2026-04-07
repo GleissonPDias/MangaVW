@@ -17,10 +17,8 @@ public class MangaDetails {
     @Schema(description = "ID únicos dos detalhes", example = "28")
     private long id;
 
-    @NotNull
-    @NotBlank
     @Size(max = 20)
-    @Schema(description = "Código de barras internacional do manga", example = "205-534-1-325")
+    @Schema(nullable = true, description = "Código de barras internacional do manga", example = "205-534-1-325")
     private String isbn;
 
 

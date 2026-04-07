@@ -29,6 +29,7 @@ public class Chapter {
     private String language;
 
     @OneToMany(mappedBy = "chapter", cascade = CascadeType.ALL)
+    @JsonIgnoreProperties("chapter")
     @Schema(description = "Lista de páginas que compõem este capítulo")
     private List<Page> pages = new ArrayList<>();
 

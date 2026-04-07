@@ -145,6 +145,11 @@ public class MangaController {
         if (newManga.getGenres() != null && !newManga.getGenres().isEmpty()) {
             List<Genre> fetchedGenres = new ArrayList<>();
             for (Genre g : newManga.getGenres()) {
+
+                if(g.getId() == null){
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Genre ID cannot be null");
+                }
+
                 Genre foundGenre = genreRepository.findById(g.getId())
                         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Genre not found: ID " + g.getId()));
                 fetchedGenres.add(foundGenre);
@@ -204,6 +209,11 @@ public class MangaController {
             if (updatedManga.getGenres() != null) {
                 List<Genre> fetchedGenres = new ArrayList<>();
                 for (Genre g : updatedManga.getGenres()) {
+
+                    if(g.getId() == null){
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Genre ID cannot be null");
+                    }
+
                     Genre foundGenre = genreRepository.findById(g.getId())
                             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Genre not found: ID " + g.getId()));
                     fetchedGenres.add(foundGenre);
@@ -213,9 +223,13 @@ public class MangaController {
 
             if(updatedManga.getDetails() != null){
                 if(manga.getDetails() != null){
+                    // Se o mangá já tem detalhes, apenas atualiza os valores
                     manga.getDetails().setIsbn(updatedManga.getDetails().getIsbn());
                     manga.getDetails().setLicensed(updatedManga.getDetails().isLicensed());
                     manga.getDetails().setPublicationYear(updatedManga.getDetails().getPublicationYear());
+                } else {
+                    // Se o mangá NÃO tem detalhes no banco, vincula os novos detalhes!
+                    manga.setDetails(updatedManga.getDetails());
                 }
             }
 

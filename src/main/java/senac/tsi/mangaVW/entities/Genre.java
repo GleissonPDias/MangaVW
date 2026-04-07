@@ -17,10 +17,11 @@ public class Genre {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Schema(description = "ID único do gênero", example = "2")
-    private long id;
+    private Long id;
 
-    @NotNull
+
     @NotBlank
+    @Column(unique = true)
     @Size(min=1, max=50)
     @Schema(description = "Nome do gênero", example = "Fantasia")
     private String name;
@@ -44,13 +45,13 @@ public class Genre {
         this.name = name;
     }
 
-    public Genre(long id, String name){
+    public Genre(Long id, String name){
         this.id = id;
         this.name = name;
     }
 
-    public long getId() { return id; }
-    public void setId(long id) { this.id = id; }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 
