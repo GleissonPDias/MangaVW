@@ -63,10 +63,21 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    String handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        return "Conflict Error: You attempted to save duplicate data or violated a database constraint.";
+public ResponseEntity<Object> handleDataIntegrity(DataIntegrityViolationException ex, WebRequest request) {
+    // Se a mensagem contiver algo sobre chave duplicada, mantemos o 409
+    if (ex.getMessage() != null && ex.getMessage().toLowerCase().contains("duplicate")) {
+        return new ResponseEntity<>(
+            createErrorBody(HttpStatus.CONFLICT, "Dados duplicados detectados.", request.getDescription(false)), 
+            HttpStatus.CONFLICT
+        );
     }
+    
+    // Para todos os outros erros de banco durante um GET ou POST, tratamos como Bad Request
+    return new ResponseEntity<>(
+        createErrorBody(HttpStatus.BAD_REQUEST, "Erro de integridade nos dados enviados.", request.getDescription(false)), 
+        HttpStatus.BAD_REQUEST
+    );
+}
 
     @ExceptionHandler(ConstraintViolationException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
