@@ -11,13 +11,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.ResponseEntity;
 
-import org.springframework.web.context.request.WebRequest;
-
-import java.time.LocalDateTime;
-
-import java.util.LinkedHashMap;
-
-import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -71,15 +64,6 @@ public class GlobalExceptionHandler {
         return ex.getMessage();
     }
 
-    @ExceptionHandler(DataIntegrityViolationException.class)
-public ResponseEntity<Object> handleDataIntegrity(DataIntegrityViolationException ex, WebRequest request) {
-    // Se a mensagem contiver algo sobre chave duplicada, mantemos o 409
-    if (ex.getMessage() != null && ex.getMessage().toLowerCase().contains("duplicate")) {
-        return new ResponseEntity<>(
-            createErrorBody(HttpStatus.CONFLICT, "Dados duplicados detectados.", request.getDescription(false)), 
-            HttpStatus.CONFLICT
-        );
-    }
     
     // Para todos os outros erros de banco durante um GET ou POST, tratamos como Bad Request
     return new ResponseEntity<>(
