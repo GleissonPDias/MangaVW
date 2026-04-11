@@ -1,5 +1,6 @@
 package senac.tsi.mangaVW.entities;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -14,11 +15,12 @@ public class MangaDetails {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonProperty(access = JsonProperty.Access.READ_WRITE)
     @Schema(description = "ID únicos dos detalhes", example = "28")
     private long id;
 
     @Size(max = 20)
-    @Schema(nullable = true, description = "Código de barras internacional do manga", example = "205-534-1-325")
+    @Schema(nullable = true,type = "string", description = "Código de barras internacional do manga", example = "205-534-1-325")
     private String isbn;
 
 

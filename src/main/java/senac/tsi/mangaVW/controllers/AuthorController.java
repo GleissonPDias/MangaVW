@@ -1,18 +1,22 @@
 package senac.tsi.mangaVW.controllers;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedResourcesAssembler;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.PagedModel;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import senac.tsi.mangaVW.entities.Author;
+import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.AuthorNotFoundException;
 import senac.tsi.mangaVW.repositories.AuthorRepository;
 
@@ -25,6 +29,8 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @Tag(name = "Authors", description = "Endpoints for managing manga authors and their biographical data")
 @RestController
 @RequestMapping("/authors")
+@ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
+        content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
 public class AuthorController {
 
     private final AuthorRepository authorRepository;
@@ -44,9 +50,9 @@ public class AuthorController {
     })
     @GetMapping
 
-    public ResponseEntity<PagedModel<EntityModel<Author>>> getAllAuthors(@ParameterObject Pageable pageable) {
+    public ResponseEntity<PagedModel<EntityModel<Author>>> getAllAuthors(@ParameterObject @PageableDefault(page = 0, size = 20)  Pageable pageable) {
         var authors = authorRepository.findAll(pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(authors));
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(authors, this::toEntityModel));
     }
 
     @Operation(summary = "Search authors by name", description = "Performs a case-insensitive search for authors matching the provided name keyword. Returns a paginated response.")
@@ -57,9 +63,9 @@ public class AuthorController {
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Author>>> searchAuthorsByName(
             @RequestParam String name,
-            @ParameterObject Pageable pageable) {
+            @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
         var authors = authorRepository.findByNameContainingIgnoreCase(name, pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(authors));
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(authors, this::toEntityModel));
     }
 
     @Operation(summary = "Get author by ID", description = "Retrieves the detailed profile of a specific author using their unique identifier. Includes self, update, and delete HATEOAS links.")
@@ -141,6 +147,11 @@ public class AuthorController {
     }
 
     @Operation(summary = "Delete an author", description = "Permanently removes an author from the database. Due to database constraints, associated entities may be affected based on cascade rules.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "Autor deletado com sucesso"),
+            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
+            @ApiResponse(responseCode = "404", description = "Autor não encontrado")
+    })
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteAuthor(@PathVariable long id) {
         if (!authorRepository.existsById(id)) {
@@ -150,13 +161,13 @@ public class AuthorController {
         return ResponseEntity.noContent().build();
     }
 
-    // --- MÉTODO AUXILIAR PARA HATEOAS ---
+
     // Centraliza a criação dos links, evitando repetição de código no GET, POST e PUT
     private EntityModel<Author> toEntityModel(Author author) {
         return EntityModel.of(author,
                 linkTo(methodOn(AuthorController.class).getAuthorById(author.getId())).withSelfRel(),
                 linkTo(methodOn(AuthorController.class).updateAuthor(author.getId(), null)).withRel("update"),
                 linkTo(methodOn(AuthorController.class).deleteAuthor(author.getId())).withRel("delete"),
-                linkTo(methodOn(AuthorController.class).getAllAuthors(Pageable.unpaged())).withRel("authors"));
+                linkTo(methodOn(AuthorController.class).getAllAuthors(null)).withRel("authors"));
     }
 }

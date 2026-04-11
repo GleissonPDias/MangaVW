@@ -2,113 +2,122 @@ package senac.tsi.mangaVW.exceptions;
 
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.core.convert.ConversionFailedException;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.transaction.TransactionSystemException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    // 🛡️ 1. Captura erros barrados pelo @Valid direto no Controller (ex: campo em branco no JSON)
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    String handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
-        return "Validation Error: Os dados enviados estão incorretos ou incompletos. Verifique o JSON da requisição.";
+    // 🛠️ Cria a estrutura JSON usando o novo Record tipado!
+    private ApiErrorResponse createErrorBody(HttpStatus status, String message, String path) {
+        return new ApiErrorResponse(
+                OffsetDateTime.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                message,
+                path.replace("uri=", "") // Deixa o caminho mais limpo no JSON
+        );
     }
 
-    // 🛡️ 2. Captura erros de validação que o Hibernate escondeu dentro de uma falha de transação
-    @ExceptionHandler(TransactionSystemException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    String handleTransactionSystemException(TransactionSystemException ex) {
-        return "Transaction Error: Falha ao processar os dados. Verifique se você enviou objetos vazios ({}) ou dados que ferem as regras de limite do banco.";
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataIntegrity(org.springframework.dao.DataIntegrityViolationException ex, WebRequest request) {
+        String msg = "Erro de integridade: Os dados enviados violam restrições do banco (ex: ID duplicado ou campo obrigatório faltando).";
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, msg, request.getDescription(false)), HttpStatus.BAD_REQUEST);
     }
 
-    @ExceptionHandler(Exception.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    String handleAllExceptions(Exception ex) {
-        // É importante logar no console do Java para VOCÊ saber o que quebrou
-        System.err.println("🚨 Erro não tratado capturado: " + ex.getClass().getName() + " - " + ex.getMessage());
-        return "Bad Request: A requisição enviou dados que o servidor não conseguiu processar. Verifique os campos e parâmetros.";
+    // 🛡️ Captura erro de tipo nos parâmetros da URL (ex: id=a em vez de id=1)
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleMethodArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException ex, WebRequest request) {
+        String error = String.format("O parâmetro '%s' deveria ser do tipo %s, mas recebeu '%s'",
+                ex.getName(), ex.getRequiredType().getSimpleName(), ex.getValue());
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, error, request.getDescription(false)), HttpStatus.BAD_REQUEST);
     }
 
-    // 🛡️ 4. Captura JSON malformado ou tipos trocados (ex: mandar string em campo boolean)
-    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    String handleHttpMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException ex) {
-        return "JSON Error: O corpo da requisição está malformado ou contém tipos de dados inválidos.";
-    }
-
-    // 🛡️ 5. Captura erros de argumentos ilegais (comum no 'sort=null' ou filtros zoados)
+    // 🛡️ Captura o erro do nosso PaginationInterceptor (page=a)
     @ExceptionHandler(IllegalArgumentException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    String handleIllegalArgument(IllegalArgumentException ex) {
-        return "Argument Error: Um ou mais parâmetros de busca são inválidos.";
+    public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException ex, WebRequest request) {
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, ex.getMessage(), request.getDescription(false)), HttpStatus.BAD_REQUEST);
     }
 
-    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
-    @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
-    String handleMethodNotAllowed(org.springframework.web.HttpRequestMethodNotSupportedException ex) {
-        return "Method Not Allowed: Este endpoint não suporta o método " + ex.getMethod();
+    // 🛡️ Erros do @Valid direto no Controller (ex: campo em branco no JSON)
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiErrorResponse> handleMethodArgumentNotValid(MethodArgumentNotValidException ex, WebRequest request) {
+        String msg = "Validation Error: Os dados enviados estão incorretos ou incompletos. Verifique o JSON da requisição.";
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, msg, request.getDescription(false)), HttpStatus.BAD_REQUEST);
     }
 
+    // 🛡️ Erros de validação escondidos no Hibernate
+    @ExceptionHandler(TransactionSystemException.class)
+    public ResponseEntity<ApiErrorResponse> handleTransactionSystemException(TransactionSystemException ex, WebRequest request) {
+        String msg = "Transaction Error: Falha ao processar os dados. Verifique limites de banco ou objetos vazios.";
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, msg, request.getDescription(false)), HttpStatus.BAD_REQUEST);
+    }
 
+    // 🛡️ JSON malformado (mandar string em boolean)
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException ex, WebRequest request) {
+        String msg = "JSON Error: O corpo da requisição está malformado ou contém tipos de dados inválidos.";
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, msg, request.getDescription(false)), HttpStatus.BAD_REQUEST);
+    }
+
+    // 🛡️ Erros de conversão e constraints
     @ExceptionHandler(ConversionFailedException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    String handleConversion(ConversionFailedException ex) {
-        return ex.getMessage();
-    }
-
-    @ExceptionHandler(DataIntegrityViolationException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    String handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        return "Conflict Error: You attempted to save duplicate data or violated a database constraint.";
+    public ResponseEntity<ApiErrorResponse> handleConversion(ConversionFailedException ex, WebRequest request) {
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, ex.getMessage(), request.getDescription(false)), HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    String handleConstraintViolation(ConstraintViolationException ex) {
-        return "Validation Error: Um ou mais campos enviados ferem as regras de validação (ex: enviou um objeto vazio que exigia dados). Detalhes: " + ex.getMessage();
+    public ResponseEntity<ApiErrorResponse> handleConstraintViolation(ConstraintViolationException ex, WebRequest request) {
+        String msg = "Validation Error: Regras de validação violadas. Detalhes: " + ex.getMessage();
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, msg, request.getDescription(false)), HttpStatus.BAD_REQUEST);
     }
 
-    @ExceptionHandler(MangaNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    String mangaNotFoundHandler(MangaNotFoundException ex) {
-        return ex.getMessage();
+    // 🛡️ CAPTURA GERAL DE NOT FOUNDS (404)
+    @ExceptionHandler({
+            MangaNotFoundException.class, AuthorNotFoundException.class,
+            GenreNotFoundException.class, ChapterNotFoundException.class,
+            PageNotFoundException.class, MangaDetailsNotFoundException.class
+    })
+    public ResponseEntity<ApiErrorResponse> handleNotFound(RuntimeException ex, WebRequest request) {
+        return new ResponseEntity<>(createErrorBody(HttpStatus.NOT_FOUND, ex.getMessage(), request.getDescription(false)), HttpStatus.NOT_FOUND);
     }
 
-    @ExceptionHandler(AuthorNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    String authorNotFoundHandler(AuthorNotFoundException ex) {
-        return ex.getMessage();
+    // 🛡️ ESCUDO FINAL (Para não dar erro 500 feio)
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiErrorResponse> handleAllExceptions(Exception ex, WebRequest request) {
+        System.err.println("🚨 Erro não tratado capturado: " + ex.getClass().getName() + " - " + ex.getMessage());
+        String msg = "Bad Request: O servidor não conseguiu processar a requisição. Verifique os campos e parâmetros.";
+        return new ResponseEntity<>(createErrorBody(HttpStatus.BAD_REQUEST, msg, request.getDescription(false)), HttpStatus.BAD_REQUEST);
     }
 
-    @ExceptionHandler(GenreNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    String genreNotFoundHandler(GenreNotFoundException ex) {
-        return ex.getMessage();
+    // 🛡️ Método não suportado (ex: método QUERY do Schemathesis)
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiErrorResponse> handleMethodNotAllowed(
+            org.springframework.web.HttpRequestMethodNotSupportedException ex, WebRequest request) {
+
+        String msg = "Method Not Allowed: O método " + ex.getMethod() + " não é suportado neste endpoint.";
+
+        // 🚨 O SEGREDO: Criamos o Header "Allow" dizendo quais métodos são aceitos (GET, POST, etc.)
+        var headers = new org.springframework.http.HttpHeaders();
+        if (ex.getSupportedHttpMethods() != null) {
+            headers.setAllow(ex.getSupportedHttpMethods());
+        }
+
+        return new ResponseEntity<>(
+                createErrorBody(HttpStatus.METHOD_NOT_ALLOWED, msg, request.getDescription(false)),
+                headers, // Passamos o header para a resposta
+                HttpStatus.METHOD_NOT_ALLOWED
+        );
     }
-
-    @ExceptionHandler(ChapterNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    String chapterNotFoundHandler(ChapterNotFoundException ex) {
-        return ex.getMessage();
-    }
-
-    @ExceptionHandler(PageNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    String pageNotFoundHandler(PageNotFoundException ex) {
-        return ex.getMessage();
-    }
-
-    @ExceptionHandler(MangaDetailsNotFoundException.class)
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    String mangaDetailsNotFoundHandler(MangaDetailsNotFoundException ex) {
-        return ex.getMessage();
-    }
-
-
 }

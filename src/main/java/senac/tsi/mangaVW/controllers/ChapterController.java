@@ -3,6 +3,7 @@ package senac.tsi.mangaVW.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,6 +11,7 @@ import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedResourcesAssembler;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.PagedModel;
@@ -17,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import senac.tsi.mangaVW.entities.Chapter;
 import senac.tsi.mangaVW.entities.Manga;
+import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.ChapterNotFoundException;
 import senac.tsi.mangaVW.exceptions.MangaNotFoundException;
 import senac.tsi.mangaVW.repositories.ChapterRepository;
@@ -30,6 +33,8 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @Tag(name = "Chapters", description = "Endpoints for managing the episodic chapter structure of mangas")
 @RestController
 @RequestMapping("/chapters")
+@ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
+        content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
 public class ChapterController {
 
     private final ChapterRepository chapterRepository;
@@ -49,9 +54,9 @@ public class ChapterController {
             @ApiResponse(responseCode = "400", description = "Invalid parameters")
     })
     @GetMapping
-    public ResponseEntity<PagedModel<EntityModel<Chapter>>> getAllChapters(@ParameterObject Pageable pageable) {
+    public ResponseEntity<PagedModel<EntityModel<Chapter>>> getAllChapters(@ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
         var chapters = chapterRepository.findAll(pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(chapters));
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(chapters, this::toEntityModel));
     }
 
     @Operation(summary = "Search chapters by language", description = "Filters and returns a paginated list of chapters that match the specified language code (e.g., 'en', 'pt-br').")
@@ -61,9 +66,9 @@ public class ChapterController {
     })
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Chapter>>> searchChaptersByLanguage(
-            @RequestParam String language, @ParameterObject Pageable pageable) {
+            @RequestParam String language, @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
         var chapters = chapterRepository.findByLanguageIgnoreCase(language, pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(chapters));
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(chapters, this::toEntityModel));
     }
 
     @Operation(summary = "Get chapter by ID", description = "Retrieves a specific chapter's information by its unique identifier, enabling access to its associated reading pages.")
@@ -85,8 +90,6 @@ public class ChapterController {
             @ApiResponse(responseCode = "201", description = "Chapter created successfully in the database"),
             @ApiResponse(responseCode = "400", description = "Malformed JSON or missing Manga ID"),
             @ApiResponse(responseCode = "404", description = "The provided Manga does not exist in the database"),
-            @ApiResponse(responseCode = "409", description = "Conflict: the chapter already exists in this manga"),
-            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Send chapter data and only the desired manga ID",
@@ -97,8 +100,19 @@ public class ChapterController {
                                     {
                                       "chapterNumber": 10.5,
                                       "language": "pt-br",
-                                      "manga":{
-                                        "id": 1
+                                      "manga": {
+                                        "id": 1,
+                                        "title": "Berserk",
+                                        "sinopsis": "A história de Guts...",
+                                        "status": "FINALIZADO",
+                                        "author": {
+                                            "id": 1,
+                                            "name": "Kentaro Miura",
+                                            "biography": "Criador de Berserk"
+                                        },
+                                        "genres": [
+                                            { "id": 1, "name": "Ação" }
+                                        ]
                                       }
                                     }
                                     """
@@ -136,8 +150,22 @@ public class ChapterController {
                     examples = @ExampleObject(
                             value = """
                                     {
-                                       "chapterNumber": 1,
-                                       "language": "pt-br"
+                                      "chapterNumber": 10.5,
+                                      "language": "pt-br",
+                                      "manga": {
+                                        "id": 1,
+                                        "title": "Berserk",
+                                        "sinopsis": "A história de Guts...",
+                                        "status": "FINALIZADO",
+                                        "author": {
+                                            "id": 1,
+                                            "name": "Kentaro Miura",
+                                            "biography": "Criador de Berserk"
+                                        },
+                                        "genres": [
+                                            { "id": 1, "name": "Ação" }
+                                        ]
+                                      }
                                     }
                                     """
                     )
@@ -177,6 +205,7 @@ public class ChapterController {
                 linkTo(methodOn(ChapterController.class).getChapterById(chapter.getId())).withSelfRel(),
                 linkTo(methodOn(ChapterController.class).updateChapter(chapter.getId(), null)).withRel("update"),
                 linkTo(methodOn(ChapterController.class).deleteChapter(chapter.getId())).withRel("delete"),
-                linkTo(methodOn(ChapterController.class).getAllChapters(Pageable.unpaged())).withRel("chapters"));
+                linkTo(methodOn(ChapterController.class).getAllChapters(null)).withRel("chapters"),
+                linkTo(methodOn(MangaController.class).getMangaById(chapter.getManga().getId())).withRel("parent_manga"));
     }
 }

@@ -6,9 +6,18 @@ import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.info.License;
 import io.swagger.v3.oas.models.Operation;
 import org.springdoc.core.customizers.OperationCustomizer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
+import org.springframework.data.web.config.EnableSpringDataWebSupport;
 import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.util.List;
 
 @Configuration
 @OpenAPIDefinition(
@@ -40,15 +49,31 @@ import org.springframework.web.method.HandlerMethod;
                 )
         )
 )
-public class OpenApiConfig {
+// 🛡️ Garante suporte a paginação moderna e DTOs
+@EnableSpringDataWebSupport(pageSerializationMode = EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO)
+public class OpenApiConfig implements WebMvcConfigurer { // ⬅️ Adicionado "implements"
+
+    /**
+     * 🛠️ CONFIGURAÇÃO DE PAGINAÇÃO RÍGIDA
+     * Este método força o Spring a lançar uma exceção quando recebe parâmetros inválidos
+     * (como letras em campos de números), permitindo que seu GlobalExceptionHandler retorne 400.
+     */
+    @Override
+    public void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
+        PageableHandlerMethodArgumentResolver resolver = new PageableHandlerMethodArgumentResolver();
+
+        // Desativa o comportamento de "ignorar erro e usar padrão"
+        resolver.setFallbackPageable(PageRequest.of(0, 20));
+
+        // Adiciona no início da lista de resolvers para ter prioridade
+        resolvers.add(0, resolver);
+    }
 
     @Bean
     public OperationCustomizer customizerRemoveNotFoundFromLists() {
         return (Operation operation, HandlerMethod handlerMethod) -> {
             String methodName = handlerMethod.getMethod().getName();
 
-            // Adicionamos "create" à lista. Agora qualquer método que comece
-            // com "create" terá o 404 removido automaticamente do Swagger.
             if (methodName.startsWith("getAll") ||
                     methodName.startsWith("search") ||
                     methodName.startsWith("create")) {
@@ -58,5 +83,13 @@ public class OpenApiConfig {
 
             return operation;
         };
+    }
+    @Autowired
+    private PaginationInterceptor paginationInterceptor;
+
+    // 🛡️ Registra a nossa barreira de proteção
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(paginationInterceptor);
     }
 }

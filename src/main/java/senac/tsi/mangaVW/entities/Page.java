@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 
 
@@ -14,21 +15,22 @@ public class Page {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonProperty(access = JsonProperty.Access.READ_WRITE)
     @Schema(description = "ID único da pagina", example = "3", accessMode = Schema.AccessMode.READ_ONLY)
     private long id;
 
 
     @Schema(description = "Número da página", example = "28")
-    private int pageNumber;
+    @Min(1)
+    private Integer pageNumber;
 
     @Schema(description = "URL da imagem", example = "https://mangadex/berserk/cap10/16")
     @NotBlank
     private String imageUrl;
 
 
-    @ManyToOne
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @JsonIgnoreProperties({"chapterNumber", "language", "pages", "manga"})
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JsonIgnoreProperties({"pages"})
     @JoinColumn(name = "chapter_id", nullable = false)
     @Schema(description = "Capítulo ao qual esta página pertence")
     private Chapter chapter;
@@ -39,14 +41,14 @@ public class Page {
 
     public Page() {}
 
-    public Page(int pageNumber, String imageUrl) {this.pageNumber = pageNumber;this.imageUrl = imageUrl;}
+    public Page(Integer pageNumber, String imageUrl) {this.pageNumber = pageNumber;this.imageUrl = imageUrl;}
 
-    public Page(long id, int pageNumber, String imageUrl) {this.id = id;this.pageNumber = pageNumber;this.imageUrl = imageUrl;}
+    public Page(long id, Integer pageNumber, String imageUrl) {this.id = id;this.pageNumber = pageNumber;this.imageUrl = imageUrl;}
 
     public long getId() {return id;}
     public void setId(long id) {this.id = id;}
 
-    public int getPageNumber() {return pageNumber;}
+    public Integer getPageNumber() {return pageNumber;}
     public void setPageNumber(int pageNumber) {this.pageNumber = pageNumber;}
 
     public String getImageUrl() {return imageUrl;}
@@ -57,7 +59,7 @@ public class Page {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Page page = (Page) o;
-        return id == page.id && pageNumber == page.pageNumber && Objects.equals(imageUrl, page.imageUrl);
+        return id == page.id && Objects.equals(pageNumber, page.pageNumber) && Objects.equals(imageUrl, page.imageUrl);
     }
 
     @Override

@@ -3,6 +3,7 @@ package senac.tsi.mangaVW.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,6 +11,7 @@ import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedResourcesAssembler;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.PagedModel;
@@ -20,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 import senac.tsi.mangaVW.entities.Author;
 import senac.tsi.mangaVW.entities.Genre;
 import senac.tsi.mangaVW.entities.Manga;
+import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.MangaNotFoundException;
 import senac.tsi.mangaVW.repositories.AuthorRepository;
 import senac.tsi.mangaVW.repositories.GenreRepository;
@@ -36,6 +39,8 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @Tag(name = "Mangas", description = "Core endpoints for managing the manga catalog and synchronization")
 @RestController
 @RequestMapping("/mangas")
+@ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
+        content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
 public class MangaController {
 
     private final MangaRepository mangaRepository;
@@ -61,10 +66,11 @@ public class MangaController {
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Manga>>> searchMangasByTitle(
             @RequestParam String title,
-            @ParameterObject Pageable pageable) {
+
+            @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
 
         var mangas = mangaRepository.findByTitleContainingIgnoreCase(title, pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(mangas));
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(mangas, this::toEntityModel));
     }
 
     @Operation(summary = "Sync mangas from MangaDex API", description = "Triggers an automated background process to fetch external manga data (titles, authors, cover arts, genres) from the public MangaDex API and saves them to the local database.")
@@ -85,9 +91,9 @@ public class MangaController {
             @ApiResponse(responseCode = "400", description = "Invalid parameters")
     })
     @GetMapping
-    public ResponseEntity<PagedModel<EntityModel<Manga>>> getAllMangas(@ParameterObject Pageable pageable){
+    public ResponseEntity<PagedModel<EntityModel<Manga>>> getAllMangas(@ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable){
         var mangas = mangaRepository.findAll(pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(mangas));
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(mangas, this::toEntityModel));
     }
 
     @Operation(summary = "Get manga by ID", description = "Retrieves full details of a specific manga by its unique ID. The response is enriched with HATEOAS links for resource discoverability.")
@@ -118,10 +124,14 @@ public class MangaController {
                               "title": "Berserk",
                               "sinopsis": "Um jovem mercenário...",
                               "status": "EM_ANDAMENTO",
-                              "author": { "id": 1 },
+                              "author": { 
+                                  "id": 1,
+                                  "name": "Kentaro Miura",
+                                  "biography": "Criador de Berserk"
+                              },
                               "genres": [
-                                { "id": 1 },
-                                { "id": 2 }
+                                { "id": 1, "name": "Ação" },
+                                { "id": 2, "name": "Fantasia Escura" }
                               ],
                               "details": {
                                     "isbn": "123121251-1215",
@@ -174,18 +184,22 @@ public class MangaController {
             content = @Content(mediaType = "application/json",
                     examples = @ExampleObject(value = """
                             {
-                              "title": "Berserk - Edição de Luxo",
-                              "sinopsis": "A nova jornada de Guts...",
-                              "status": "FINALIZADO",
-                              "author": { "id": 1 },
+                              "title": "Berserk",
+                              "sinopsis": "Um jovem mercenário...",
+                              "status": "EM_ANDAMENTO",
+                              "author": { 
+                                  "id": 1,
+                                  "name": "Kentaro Miura",
+                                  "biography": "Criador de Berserk"
+                              },
                               "genres": [
-                                { "id": 1 },
-                                { "id": 3 }
+                                { "id": 1, "name": "Ação" },
+                                { "id": 2, "name": "Fantasia Escura" }
                               ],
                               "details": {
-                                "isbn": "978-85-XXXX-XX",
-                                "licensed": true,
-                                "publicationYear": 1989
+                                    "isbn": "123121251-1215",
+                                    "licensed": false,
+                                    "publicationYear": 2005
                               }
                             }
                             """)))
@@ -242,6 +256,7 @@ public class MangaController {
     @Operation(summary = "Delete a manga", description = "Permanently deletes a manga. All associated chapters, pages, and technical details will be cascaded and deleted automatically.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Deleted successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
             @ApiResponse(responseCode = "404", description = "Manga not found")
     })
     @DeleteMapping("/{id}")
@@ -259,6 +274,6 @@ public class MangaController {
                 linkTo(methodOn(MangaController.class).getMangaById(manga.getId())).withSelfRel(),
                 linkTo(methodOn(MangaController.class).updateManga(manga.getId(), null)).withRel("update"),
                 linkTo(methodOn(MangaController.class).deleteManga(manga.getId())).withRel("delete"),
-                linkTo(methodOn(MangaController.class).getAllMangas(Pageable.unpaged())).withRel("mangas"));
+                linkTo(methodOn(MangaController.class).getAllMangas(null)).withRel("mangas"));
     }
 }

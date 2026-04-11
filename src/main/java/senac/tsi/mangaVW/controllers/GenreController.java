@@ -1,6 +1,8 @@
 package senac.tsi.mangaVW.controllers;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -8,6 +10,7 @@ import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedResourcesAssembler;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.PagedModel;
@@ -15,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import senac.tsi.mangaVW.entities.Genre;
 import senac.tsi.mangaVW.entities.Manga;
+import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.GenreNotFoundException;
 import senac.tsi.mangaVW.repositories.GenreRepository;
 import senac.tsi.mangaVW.repositories.MangaRepository;
@@ -29,6 +33,8 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @Tag(name = "Genres", description = "Endpoints for categorizing mangas into literary genres")
 @RestController
 @RequestMapping("/genres")
+@ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
+        content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
 public class GenreController {
 
     private final GenreRepository genreRepository;
@@ -50,7 +56,7 @@ public class GenreController {
             @ApiResponse(responseCode = "400", description = "Invalid parameters")
     })
     @GetMapping
-    public ResponseEntity<PagedModel<EntityModel<Genre>>> getAllGenres(@ParameterObject Pageable pageable) {
+    public ResponseEntity<PagedModel<EntityModel<Genre>>> getAllGenres(@ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
         var genres = genreRepository.findAll(pageable);
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(genres));
     }
@@ -62,7 +68,7 @@ public class GenreController {
     })
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Genre>>> searchGenresByName(
-            @RequestParam String name, @ParameterObject Pageable pageable) {
+            @RequestParam String name, @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
         var genres = genreRepository.findByNameContainingIgnoreCase(name, pageable);
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(genres));
     }
@@ -167,6 +173,6 @@ public class GenreController {
                 linkTo(methodOn(GenreController.class).getGenreById(genre.getId())).withSelfRel(),
                 linkTo(methodOn(GenreController.class).updateGenre(genre.getId(), null)).withRel("update"),
                 linkTo(methodOn(GenreController.class).deleteGenre(genre.getId())).withRel("delete"),
-                linkTo(methodOn(GenreController.class).getAllGenres(Pageable.unpaged())).withRel("genres"));
+                linkTo(methodOn(GenreController.class).getAllGenres(null)).withRel("genres"));
     }
 }

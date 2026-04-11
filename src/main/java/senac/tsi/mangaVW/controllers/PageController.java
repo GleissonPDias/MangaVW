@@ -3,6 +3,7 @@ package senac.tsi.mangaVW.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,6 +11,7 @@ import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedResourcesAssembler;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.PagedModel;
@@ -17,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import senac.tsi.mangaVW.entities.Chapter;
 import senac.tsi.mangaVW.entities.Page;
+import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.ChapterNotFoundException;
 import senac.tsi.mangaVW.exceptions.PageNotFoundException;
 import senac.tsi.mangaVW.repositories.ChapterRepository;
@@ -30,6 +33,9 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @Tag(name = "Pages", description = "Endpoints for managing individual reading pages and image URLs")
 @RestController
 @RequestMapping("/pages")
+// 🛡️ Documentação global de erro 400 para todos os métodos da classe
+@ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
+        content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
 public class PageController {
 
     private final PageRepository pageRepository;
@@ -43,34 +49,30 @@ public class PageController {
         this.chapterRepository = chapterRepository;
     }
 
-    @Operation(summary = "Get all pages", description = "Retrieves a paginated list of all reading pages currently stored in the system.")
+    @Operation(summary = "Get all pages", description = "Retrieves a paginated list of all reading pages.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "List returned successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid parameters")
+            @ApiResponse(responseCode = "200", description = "List returned successfully")
+            // O 400 já é herdado da classe
     })
     @GetMapping
-    public ResponseEntity<PagedModel<EntityModel<Page>>> getAllPages(@ParameterObject Pageable pageable) {
+    public ResponseEntity<PagedModel<EntityModel<Page>>> getAllPages(@ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
         var pages = pageRepository.findAll(pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(pages));
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(pages, this::toEntityModel));
     }
 
-    @Operation(summary = "Search pages by image URL", description = "Finds pages based on a partial match of their image URL. Useful for tracing specific image hosts.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Search completed successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid search URL"),
-    })
+    @Operation(summary = "Search pages by image URL")
+    @ApiResponse(responseCode = "200", description = "Search completed successfully")
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Page>>> searchPagesByUrl(
-            @RequestParam String imageUrl, @ParameterObject Pageable pageable) {
+            @RequestParam String imageUrl, @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
         var pages = pageRepository.findByImageUrlContainingIgnoreCase(imageUrl, pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(pages));
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(pages, this::toEntityModel));
     }
 
-    @Operation(summary = "Get page by ID", description = "Retrieves a single page object, providing its display order number and the source image URL.")
+    @Operation(summary = "Get page by ID")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Page found successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
-            @ApiResponse(responseCode = "404", description = "Page not found in the database")
+            @ApiResponse(responseCode = "404", description = "Page not found")
     })
     @GetMapping("/{id}")
     public ResponseEntity<EntityModel<Page>> getPageById(@PathVariable long id) {
@@ -78,23 +80,29 @@ public class PageController {
         return ResponseEntity.ok(toEntityModel(page));
     }
 
-    @Operation(summary = "Create a new page", description = "Adds a new page to an existing chapter. Requires the chapter ID and a valid image URL.")
+    @Operation(summary = "Create a new page", description = "Adds a new page to an existing chapter. The full hierarchy is simulated in the example to pass validation.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Page created successfully in the database"),
-            @ApiResponse(responseCode = "400", description = "Malformed JSON or missing Chapter ID"),
-            @ApiResponse(responseCode = "404", description = "The Chapter does not exist in the database"),
-            @ApiResponse(responseCode = "409", description = "Conflict: Page already exists"),
-            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
+            @ApiResponse(responseCode = "201", description = "Page created successfully"),
+            @ApiResponse(responseCode = "404", description = "The Chapter does not exist")
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Send page data and only the desired chapter ID",
             content = @Content(mediaType = "application/json",
                     examples = @ExampleObject(value = """
                             {
                               "pageNumber": 28,
                               "imageUrl": "https://mangadex/berserk/cap10/16",
                               "chapter": {
-                                "id": 1
+                                "id": 1,
+                                "chapterNumber": 10.0,
+                                "language": "pt-br",
+                                "manga": {
+                                    "id": 1,
+                                    "title": "Berserk",
+                                    "sinopsis": "A história de Guts...",
+                                    "status": "FINALIZADO",
+                                    "author": { "id": 1, "name": "Kentaro Miura", "biography": "Criador" },
+                                    "genres": [{"id": 1, "name" : "Ação"}]
+                                }
                               }
                             }
                             """)))
@@ -103,31 +111,37 @@ public class PageController {
         if(newPage.getChapter() == null || newPage.getChapter().getId() == null){
             return ResponseEntity.badRequest().build();
         }
-
         Chapter chapter = chapterRepository.findById(newPage.getChapter().getId())
                 .orElseThrow(() -> new ChapterNotFoundException(newPage.getChapter().getId()));
         newPage.setChapter(chapter);
-
         Page savedPage = pageRepository.save(newPage);
-
-        return ResponseEntity
-                .created(URI.create("/pages/" + savedPage.getId()))
-                .body(toEntityModel(savedPage));
+        return ResponseEntity.created(URI.create("/pages/" + savedPage.getId())).body(toEntityModel(savedPage));
     }
 
-    @Operation(summary = "Update a page", description = "Updates the page sequence number or the image URL for an existing page.")
+    @Operation(summary = "Update a page", description = "Updates the page number or image URL. The chapter link is immutable.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Page updated successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid JSON provided"),
-            @ApiResponse(responseCode = "404", description = "The page you are trying to update does not exist")
+            @ApiResponse(responseCode = "404", description = "Page not found")
     })
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Send only the fields to be updated (chapter link is not changed here).",
             content = @Content(mediaType = "application/json",
                     examples = @ExampleObject(value = """
                             {
                               "pageNumber": 30,
-                              "imageUrl": "https://mangadex/berserk/cap10/16-atualizada.jpg"
+                              "imageUrl": "https://mangadex/berserk/cap10/16-atualizada.jpg",
+                              "chapter": {
+                                "id": 1,
+                                "chapterNumber": 10.0,
+                                "language": "pt-br",
+                                "manga": {
+                                    "id": 1,
+                                    "title": "Berserk",
+                                    "sinopsis": "...",
+                                    "status": "FINALIZADO",
+                                    "author": { "id": 1, "name": "Miura", "biography": "..." },
+                                    "genres": [{"id": 1, "name" : "Ação"}]
+                                }
+                              }
                             }
                             """)))
     @PutMapping("/{id}")
@@ -135,17 +149,15 @@ public class PageController {
         return pageRepository.findById(id).map(page -> {
             page.setPageNumber(updatedPage.getPageNumber());
             page.setImageUrl(updatedPage.getImageUrl());
-
             Page savedPage = pageRepository.save(page);
             return ResponseEntity.ok(toEntityModel(savedPage));
         }).orElseThrow(() -> new PageNotFoundException(id)) ;
     }
 
-    @Operation(summary = "Delete a page", description = "Removes a specific page from its chapter. This action is irreversible.")
+    @Operation(summary = "Delete a page")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Deleted successfully!"),
-            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
-            @ApiResponse(responseCode = "404", description = "The informed page does not exist in the database"),
+            @ApiResponse(responseCode = "204", description = "Deleted successfully"),
+            @ApiResponse(responseCode = "404", description = "Page not found")
     })
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePage(@PathVariable long id) {
@@ -156,12 +168,12 @@ public class PageController {
         return ResponseEntity.noContent().build();
     }
 
-    // --- HELPER METHOD FOR HATEOAS ---
     private EntityModel<Page> toEntityModel(Page page) {
         return EntityModel.of(page,
                 linkTo(methodOn(PageController.class).getPageById(page.getId())).withSelfRel(),
                 linkTo(methodOn(PageController.class).updatePage(page.getId(), null)).withRel("update"),
                 linkTo(methodOn(PageController.class).deletePage(page.getId())).withRel("delete"),
-                linkTo(methodOn(PageController.class).getAllPages(Pageable.unpaged())).withRel("pages"));
+                linkTo(methodOn(PageController.class).getAllPages(null)).withRel("pages"),
+                linkTo(methodOn(ChapterController.class).getChapterById(page.getChapter().getId())).withRel("parent_chapter"));
     }
 }

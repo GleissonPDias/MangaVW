@@ -17,10 +17,11 @@ public class Chapter {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Schema(description = "ID unico do capitulo", example = "1")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @Schema(description = "ID unico do capitulo", example = "1", accessMode = Schema.AccessMode.READ_ONLY)
     private Long id;
 
-    @Schema(description = "Numero do capitulo", example = "10.5")
+    @Schema(description = "Numero do capitulo", example = "10.5", type = "number", format = "double", implementation = Double.class, nullable = true)
     private Double chapterNumber;
 
     @NotBlank
@@ -33,11 +34,10 @@ public class Chapter {
     @Schema(description = "Lista de páginas que compõem este capítulo")
     private List<Page> pages = new ArrayList<>();
 
-    @ManyToOne
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @JsonIgnoreProperties({"author", "details", "chapters", "genres", "sinopsis", "status"})
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JsonIgnoreProperties({"author", "details", "chapters"})
     @JoinColumn(name = "manga_id", nullable = false)
-    @Schema(description = "Mangá ao qual este capítulo pertence")
+    @Schema(description = "Mangá ao qual este capítulo pertence", accessMode = Schema.AccessMode.READ_WRITE)
     private Manga manga;
 
     public Chapter() {}

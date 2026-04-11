@@ -1,6 +1,7 @@
 package senac.tsi.mangaVW.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import jakarta.validation.Valid;
@@ -18,6 +19,7 @@ public class Manga {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonProperty(access = JsonProperty.Access.READ_WRITE)
     @Schema(description = "Unique identifier of the manga", example = "1")
     private Long id;
 

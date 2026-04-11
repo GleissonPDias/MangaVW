@@ -3,6 +3,7 @@ package senac.tsi.mangaVW.controllers;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,12 +11,14 @@ import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.data.web.PagedResourcesAssembler;
 import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.PagedModel;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import senac.tsi.mangaVW.entities.MangaDetails;
+import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.MangaDetailsNotFoundException;
 import senac.tsi.mangaVW.repositories.MangaDetailsRepository;
 import senac.tsi.mangaVW.repositories.MangaRepository;
@@ -28,11 +31,13 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @Tag(name = "Manga Details", description = "Endpoints for managing technical publishing metadata")
 @RestController
 @RequestMapping("/manga-details")
+@ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
+        content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
 public class MangaDetailsController {
 
     private final MangaDetailsRepository detailsRepository;
     private final PagedResourcesAssembler<MangaDetails> pagedResourcesAssembler;
-    private final MangaRepository mangaRepository; // Injetado para o Delete Seguro
+    private final MangaRepository mangaRepository;
 
     @Autowired
     public MangaDetailsController(MangaDetailsRepository detailsRepository,
@@ -43,23 +48,29 @@ public class MangaDetailsController {
         this.mangaRepository = mangaRepository;
     }
 
-    @Operation(summary = "Get all manga details", description = "Retrieves a paginated list of all technical metadata records (ISBN, publication year, etc.).")
-    @GetMapping
-    public ResponseEntity<PagedModel<EntityModel<MangaDetails>>> getAllDetails(@ParameterObject Pageable pageable) {
-        var details = detailsRepository.findAll(pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(details));
-    }
-
-    @Operation(summary = "Search by license status", description = "Filters the technical details based on their official licensing status (true for licensed, false for unlicensed).")
+    // 🚀 AQUI ESTÁ A MÁGICA: Um único método faz o "Get All" e o "Filter"
+    @Operation(summary = "Get all manga details", description = "Retrieves a paginated list of all technical metadata records. You can optionally filter by licensing status (true/false).")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Search completed successfully"),
+            @ApiResponse(responseCode = "200", description = "Search/List completed successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid search parameters"),
     })
-    @GetMapping("/search")
-    public ResponseEntity<PagedModel<EntityModel<MangaDetails>>> searchDetailsByLicense(
-            @RequestParam Boolean licensed, @ParameterObject Pageable pageable) {
-        var details = detailsRepository.findByLicensed(licensed, pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(details));
+    @GetMapping
+    public ResponseEntity<PagedModel<EntityModel<MangaDetails>>> getAllDetails(
+            @RequestParam(required = false) Boolean licensed,
+            @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
+
+        org.springframework.data.domain.Page<MangaDetails> details;
+
+        // Se o front-end enviou ?licensed=true ou false, usamos o filtro
+        if (licensed != null) {
+            details = detailsRepository.findByLicensed(licensed, pageable);
+        }
+        // Se não enviou nada, buscamos todos os detalhes
+        else {
+            details = detailsRepository.findAll(pageable);
+        }
+
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(details, this::toEntityModel));
     }
 
     @Operation(summary = "Get details by ID", description = "Retrieves a specific technical details record using its unique identifier.")
@@ -133,6 +144,7 @@ public class MangaDetailsController {
     @Operation(summary = "Delete manga details", description = "Safely deletes a details record. If currently linked to a manga, the relationship is automatically severed before deletion to avoid conflicts.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Deleted successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
             @ApiResponse(responseCode = "404", description = "Manga details not found")
     })
     @DeleteMapping("/{id}")
@@ -157,6 +169,7 @@ public class MangaDetailsController {
                 linkTo(methodOn(MangaDetailsController.class).getDetailsById(details.getId())).withSelfRel(),
                 linkTo(methodOn(MangaDetailsController.class).updateDetails(details.getId(), null)).withRel("update"),
                 linkTo(methodOn(MangaDetailsController.class).deleteDetails(details.getId())).withRel("delete"),
-                linkTo(methodOn(MangaDetailsController.class).getAllDetails(Pageable.unpaged())).withRel("all-details"));
+                // 👇 AQUI: Passamos 'null' para os dois parâmetros que o getAllDetails agora pede (licensed e pageable)
+                linkTo(methodOn(MangaDetailsController.class).getAllDetails(null, null)).withRel("all-details"));
     }
 }
