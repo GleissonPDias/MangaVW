@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import senac.tsi.mangaVW.entities.Author;
 import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.AuthorNotFoundException;
+import senac.tsi.mangaVW.infrastructure.RateLimit;
 import senac.tsi.mangaVW.repositories.AuthorRepository;
 
 import jakarta.validation.Valid;
@@ -31,6 +32,7 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @RequestMapping("/authors")
 @ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
         content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
+@ApiResponse(responseCode = "429", description = "Too Many Requests: Rate limit exceeded", content = @Content)
 public class AuthorController {
 
     private final AuthorRepository authorRepository;
@@ -45,11 +47,11 @@ public class AuthorController {
 
     @Operation(summary = "Get all authors", description = "Retrieves a paginated list of all registered authors in the database. Includes embedded HATEOAS links for navigation.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Lista retornada com sucesso"),
-            @ApiResponse(responseCode = "400", description = "Parâmetros inválidos")
+            @ApiResponse(responseCode = "200", description = "List returned successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid parameters")
     })
+    @RateLimit(capacity = 20, minutes = 1)
     @GetMapping
-
     public ResponseEntity<PagedModel<EntityModel<Author>>> getAllAuthors(@ParameterObject @PageableDefault(page = 0, size = 20)  Pageable pageable) {
         var authors = authorRepository.findAll(pageable);
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(authors, this::toEntityModel));
@@ -57,9 +59,10 @@ public class AuthorController {
 
     @Operation(summary = "Search authors by name", description = "Performs a case-insensitive search for authors matching the provided name keyword. Returns a paginated response.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Pesquisa realizada com sucesso"),
-            @ApiResponse(responseCode = "400", description = "URL de pesquisa inválida"),
+            @ApiResponse(responseCode = "200", description = "Search completed successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid search URL"),
     })
+    @RateLimit(capacity = 2)
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Author>>> searchAuthorsByName(
             @RequestParam String name,
@@ -70,10 +73,11 @@ public class AuthorController {
 
     @Operation(summary = "Get author by ID", description = "Retrieves the detailed profile of a specific author using their unique identifier. Includes self, update, and delete HATEOAS links.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Autor encontrado com sucesso"),
-            @ApiResponse(responseCode = "400", description = "Formato de ID inválido"),
-            @ApiResponse(responseCode = "404", description = "Autor não encontrado no banco de dados")
+            @ApiResponse(responseCode = "200", description = "Author found successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
+            @ApiResponse(responseCode = "404", description = "Author not found in the database")
     })
+    @RateLimit(capacity = 40)
     @GetMapping("/{id}")
     public ResponseEntity<EntityModel<Author>> getAuthorById(@PathVariable long id) {
         var author = authorRepository.findById(id)
@@ -85,18 +89,19 @@ public class AuthorController {
 
     @Operation(summary = "Create a new author", description = "Registers a new author in the system. Requires a valid name and biography. Returns the created resource location.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Autor criado com sucesso no banco de dados"),
-            @ApiResponse(responseCode = "422", description = "Entidade não processável: Erro de validação dos campos")
+            @ApiResponse(responseCode = "201", description = "Author created successfully in the database"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Envie os dados básicos do novo autor",
+            description = "Send the basic data of the new author",
             content = @io.swagger.v3.oas.annotations.media.Content(
                     mediaType = "application/json",
                     examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
                             value = """
                                     {
                                       "name": "Masashi Kishimoto",
-                                      "biography": "Autor de renome, criador da franquia Naruto."
+                                      "biography": "Renowned author, creator of the Naruto franchise."
                                     }
                                     """
                     )
@@ -114,19 +119,21 @@ public class AuthorController {
 
     @Operation(summary = "Update an author", description = "Updates the biographical information of an existing author. Linked mangas are preserved and not affected by this operation.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Autor atualizado com sucesso"),
-            @ApiResponse(responseCode = "400", description = "JSON inválido fornecido na requisição"),
-            @ApiResponse(responseCode = "404", description = "O autor que você está tentando atualizar não existe")
+            @ApiResponse(responseCode = "200", description = "Author updated successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid JSON provided in the request"),
+            @ApiResponse(responseCode = "404", description = "The author you are trying to update does not exist"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Atualize os dados do autor. Os mangás vinculados não são alterados por esta rota",
+            description = "Update author data. Linked mangas are not altered by this route.",
             content = @io.swagger.v3.oas.annotations.media.Content(
                     mediaType = "application/json",
                     examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
                             value = """
                                     {
                                       "name": "Masashi Kishimoto",
-                                      "biography": "Criador de Naruto e Samurai 8."
+                                      "biography": "Creator of Naruto and Samurai 8."
                                     }
                                     """
                     )
@@ -148,10 +155,11 @@ public class AuthorController {
 
     @Operation(summary = "Delete an author", description = "Permanently removes an author from the database. Due to database constraints, associated entities may be affected based on cascade rules.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Autor deletado com sucesso"),
+            @ApiResponse(responseCode = "204", description = "Author deleted successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
-            @ApiResponse(responseCode = "404", description = "Autor não encontrado")
+            @ApiResponse(responseCode = "404", description = "Author not found")
     })
+    @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteAuthor(@PathVariable long id) {
         if (!authorRepository.existsById(id)) {

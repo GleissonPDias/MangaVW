@@ -16,15 +16,15 @@ public class Page {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @JsonProperty(access = JsonProperty.Access.READ_WRITE)
-    @Schema(description = "ID único da pagina", example = "3", accessMode = Schema.AccessMode.READ_ONLY)
+    @Schema(description = "Unique page ID", example = "3", accessMode = Schema.AccessMode.READ_ONLY)
     private long id;
 
 
-    @Schema(description = "Número da página", example = "28")
-    @Min(1)
+    @Schema(description = "Page number", example = "28")
+    @Min(value = 1, message = "The minimum page number must be 1")
     private Integer pageNumber;
 
-    @Schema(description = "URL da imagem", example = "https://mangadex/berserk/cap10/16")
+    @Schema(description = "Image URL", example = "https://mangadex/berserk/cap10/16")
     @NotBlank
     private String imageUrl;
 
@@ -32,7 +32,7 @@ public class Page {
     @ManyToOne(fetch = FetchType.EAGER)
     @JsonIgnoreProperties({"pages"})
     @JoinColumn(name = "chapter_id", nullable = false)
-    @Schema(description = "Capítulo ao qual esta página pertence")
+    @Schema(description = "Chapter to which this page belongs")
     private Chapter chapter;
 
     public Chapter getChapter() { return chapter; }

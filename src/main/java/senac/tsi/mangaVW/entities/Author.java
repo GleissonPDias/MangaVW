@@ -1,13 +1,10 @@
 package senac.tsi.mangaVW.entities;
 
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.util.ArrayList;
@@ -21,24 +18,25 @@ public class Author {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @JsonProperty(access = JsonProperty.Access.READ_WRITE)
-    @Schema(description = "ID único do autor", example = "2")
+    @Schema(description = "Unique author ID", example = "2")
     private Long id;
 
 
     @NotBlank
-    @Size(min=1, max=50)
-    @Schema(description = "Nome do autor", example = "Urasawa Naoki")
+    @Size(min=2, max=50, message="The name must be between 2 and 50 characters")
+    @Schema(description = "Author's name", example = "Urasawa Naoki")
     private String name;
 
 
     @NotBlank
     @Column(columnDefinition = "TEXT")
-    @Schema(description = "Biografia do autor", example = "Naoki nasceu no...")
+    @Size(min = 3, max = 255, message = "The biography must be between 3 and 255 characters")
+    @Schema(description = "Author's biography", example = "Naoki was born in...")
     private String biography;
 
     @OneToMany(mappedBy = "author", cascade = CascadeType.ALL)
     @JsonIgnoreProperties("author")
-    @Schema(description = "Lista de mangás escritos por este autor")
+    @Schema(description = "List of mangas written by this author")
     private List<Manga> mangas = new ArrayList<>();
 
     public List<Manga> getMangas() {

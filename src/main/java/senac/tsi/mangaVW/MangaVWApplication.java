@@ -1,17 +1,16 @@
 package senac.tsi.mangaVW;
 
-import io.swagger.v3.oas.annotations.OpenAPIDefinition;
-import io.swagger.v3.oas.annotations.info.Contact;
-import io.swagger.v3.oas.annotations.info.Info;
-import io.swagger.v3.oas.annotations.info.License;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication
+import java.util.Locale;
 
+@SpringBootApplication
 public class MangaVWApplication {
 
 	public static void main(String[] args) {
+		// 🌍 Força o idioma da aplicação para Inglês, garantindo que as validações automáticas do Java saiam em inglês
+		Locale.setDefault(Locale.ENGLISH);
 		SpringApplication.run(MangaVWApplication.class, args);
 	}
 

@@ -17,27 +17,27 @@ public class Chapter {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-    @Schema(description = "ID unico do capitulo", example = "1", accessMode = Schema.AccessMode.READ_ONLY)
+    @JsonProperty(access = JsonProperty.Access.READ_WRITE)
+    @Schema(description = "Unique chapter ID", example = "1", accessMode = Schema.AccessMode.READ_ONLY)
     private Long id;
 
-    @Schema(description = "Numero do capitulo", example = "10.5", type = "number", format = "double", implementation = Double.class, nullable = true)
+    @Schema(description = "Chapter number", example = "10.5", type = "number", format = "double", implementation = Double.class, nullable = true)
     private Double chapterNumber;
 
     @NotBlank
-    @Schema(description = "Idioma do capitulo", example = "PT-BR")
-    @Size(min = 1, max = 20)
+    @Schema(description = "Chapter language", example = "PT-BR")
+    @Size(min = 2, max = 20, message = "The language must have at least 2 characters")
     private String language;
 
     @OneToMany(mappedBy = "chapter", cascade = CascadeType.ALL)
     @JsonIgnoreProperties("chapter")
-    @Schema(description = "Lista de páginas que compõem este capítulo")
+    @Schema(description = "List of pages that make up this chapter")
     private List<Page> pages = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JsonIgnoreProperties({"author", "details", "chapters"})
     @JoinColumn(name = "manga_id", nullable = false)
-    @Schema(description = "Mangá ao qual este capítulo pertence", accessMode = Schema.AccessMode.READ_WRITE)
+    @Schema(description = "Manga to which this chapter belongs", accessMode = Schema.AccessMode.READ_WRITE)
     private Manga manga;
 
     public Chapter() {}

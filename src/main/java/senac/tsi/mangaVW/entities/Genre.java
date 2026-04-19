@@ -18,20 +18,20 @@ public class Genre {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @JsonProperty(access = JsonProperty.Access.READ_WRITE)
-    @Schema(description = "ID único do gênero", example = "2")
+    @Schema(description = "Unique genre ID", example = "2")
     private Long id;
 
 
     @NotBlank
     @Column(unique = true)
-    @Size(min=1, max=50)
-    @Schema(description = "Nome do gênero", example = "Fantasia")
+    @Size(min=2, max=50, message = "The genre name must be between 2 and 50 characters")
+    @Schema(description = "Genre name", example = "Fantasy")
     private String name;
 
 
     @ManyToMany(mappedBy = "genres")
     @JsonIgnoreProperties("genres")
-    @Schema(description = "Lista de mangás que pertencem a este gênero")
+    @Schema(description = "List of mangas that belong to this genre")
     private List<Manga> mangas = new ArrayList<>();
 
     public List<Manga> getMangas() {

@@ -1,5 +1,6 @@
 package senac.tsi.mangaVW.controllers;
 
+import senac.tsi.mangaVW.infrastructure.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -39,9 +40,9 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @Tag(name = "Mangas", description = "Core endpoints for managing the manga catalog and synchronization")
 @RestController
 @RequestMapping("/mangas")
-@ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
-        content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
+@ApiResponse(responseCode = "429", description = "Too Many Requests: Rate limit exceeded", content = @Content)
 public class MangaController {
+
 
     private final MangaRepository mangaRepository;
     private final PagedResourcesAssembler<Manga> pagedResourcesAssembler;
@@ -60,9 +61,18 @@ public class MangaController {
         this.mangaDexService = mangaDexService;
         this.authorRepository = authorRepository;
         this.genreRepository = genreRepository;
+
     }
 
+
+
     @Operation(summary = "Search mangas by title", description = "Performs a paginated, case-insensitive search for mangas containing the specified title keyword.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List returned successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @RateLimit(capacity = 2)
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Manga>>> searchMangasByTitle(
             @RequestParam String title,
@@ -74,6 +84,10 @@ public class MangaController {
     }
 
     @Operation(summary = "Sync mangas from MangaDex API", description = "Triggers an automated background process to fetch external manga data (titles, authors, cover arts, genres) from the public MangaDex API and saves them to the local database.")
+    @RateLimit(capacity = 1, minutes = 30)
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List returned successfully")
+    })
     @PostMapping("/sync")
     public ResponseEntity<String> syncFromMangaDex() {
         try {
@@ -88,10 +102,14 @@ public class MangaController {
     @Operation(summary = "Get all mangas", description = "Retrieves a comprehensive, paginated list of all mangas available in the catalog, including their related entities (Author, Details).")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List returned successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid parameters")
+            @ApiResponse(responseCode = "400", description = "Invalid parameters",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
     })
+    @RateLimit()
     @GetMapping
-    public ResponseEntity<PagedModel<EntityModel<Manga>>> getAllMangas(@ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable){
+    public ResponseEntity<PagedModel<EntityModel<Manga>>> getAllMangas(
+            @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
+
         var mangas = mangaRepository.findAll(pageable);
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(mangas, this::toEntityModel));
     }
@@ -99,9 +117,11 @@ public class MangaController {
     @Operation(summary = "Get manga by ID", description = "Retrieves full details of a specific manga by its unique ID. The response is enriched with HATEOAS links for resource discoverability.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Manga found successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
+            @ApiResponse(responseCode = "400", description = "Invalid ID format (must be a number)",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Manga not found")
     })
+    @RateLimit(capacity = 40)
     @GetMapping("/{id}")
     public ResponseEntity<EntityModel<Manga>> getMangaById(@PathVariable long id){
         var manga = mangaRepository.findById(id)
@@ -113,25 +133,26 @@ public class MangaController {
     @Operation(summary = "Create a new manga", description = "Adds a new manga to the catalog. Requires an existing Author ID. Genres and technical details can be optionally linked during creation.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Manga created successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid data provided"),
-            @ApiResponse(responseCode = "404", description = "Author or Genre provided does not exist")
+            @ApiResponse(responseCode = "400", description = "Malformed JSON payload",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Author or Genre provided does not exist"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Manga data. Author ID is mandatory. Genres and Details are optional.",
             content = @Content(mediaType = "application/json",
                     examples = @ExampleObject(value = """
                             {
                               "title": "Berserk",
-                              "sinopsis": "Um jovem mercenário...",
+                              "sinopsis": "A young mercenary...",
                               "status": "EM_ANDAMENTO",
                               "author": { 
-                                  "id": 1,
-                                  "name": "Kentaro Miura",
-                                  "biography": "Criador de Berserk"
+                                  "id": 1
                               },
                               "genres": [
-                                { "id": 1, "name": "Ação" },
-                                { "id": 2, "name": "Fantasia Escura" }
+                                { "id": 1 },
+                                { "id": 2 }
                               ],
                               "details": {
                                     "isbn": "123121251-1215",
@@ -148,7 +169,7 @@ public class MangaController {
             return ResponseEntity.badRequest().build();
         }
         Author author = authorRepository.findById(newManga.getAuthor().getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Author not found"));
+                .orElseThrow(() -> new senac.tsi.mangaVW.exceptions.AuthorNotFoundException(newManga.getAuthor().getId()));
         newManga.setAuthor(author);
 
         // 2. Busca e valida a lista de Gêneros (se for enviada)
@@ -161,7 +182,7 @@ public class MangaController {
                 }
 
                 Genre foundGenre = genreRepository.findById(g.getId())
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Genre not found: ID " + g.getId()));
+                        .orElseThrow(() -> new senac.tsi.mangaVW.exceptions.GenreNotFoundException(g.getId()));
                 fetchedGenres.add(foundGenre);
             }
             newManga.setGenres(fetchedGenres);
@@ -176,33 +197,34 @@ public class MangaController {
     @Operation(summary = "Update a manga", description = "Updates the core metadata of an existing manga. Relationships with authors, genres, and details can be modified by providing their respective IDs.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Manga updated successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid data"),
-            @ApiResponse(responseCode = "404", description = "Manga or relationships not found")
+            @ApiResponse(responseCode = "400", description = "Malformed JSON payload",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Manga or relationships not found"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Update the data. Send the author ID to maintain/change the link.",
             content = @Content(mediaType = "application/json",
                     examples = @ExampleObject(value = """
                             {
-                              "title": "Berserk",
-                              "sinopsis": "Um jovem mercenário...",
-                              "status": "EM_ANDAMENTO",
-                              "author": { 
-                                  "id": 1,
-                                  "name": "Kentaro Miura",
-                                  "biography": "Criador de Berserk"
-                              },
-                              "genres": [
-                                { "id": 1, "name": "Ação" },
-                                { "id": 2, "name": "Fantasia Escura" }
-                              ],
-                              "details": {
-                                    "isbn": "123121251-1215",
-                                    "licensed": false,
-                                    "publicationYear": 2005
-                              }
+                                "title": "New Berserk",
+                                "sinopsis": "New synopsis...",
+                                "status": "EM_ANDAMENTO",
+                                "author": {
+                                    "id": 2
+                                },
+                                "genres": [
+                                    { "id": 1 },
+                                    { "id": 3 }
+                                ],
+                                "details": {
+                                    "isbn": "999-99-99-99",
+                                    "licensed": true,
+                                    "publicationYear": 2026
+                                }
                             }
-                            """)))
+                        """)))
     @PutMapping("/{id}")
     public ResponseEntity<EntityModel<Manga>> updateManga(@PathVariable long id, @Valid @RequestBody Manga updatedManga){
         return mangaRepository.findById(id).map(manga -> {
@@ -215,7 +237,7 @@ public class MangaController {
             // Valida e atualiza Autor
             if (updatedManga.getAuthor() != null && updatedManga.getAuthor().getId() != null) {
                 Author author = authorRepository.findById(updatedManga.getAuthor().getId())
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Author not found"));
+                        .orElseThrow(() -> new senac.tsi.mangaVW.exceptions.AuthorNotFoundException(updatedManga.getAuthor().getId()));
                 manga.setAuthor(author);
             }
 
@@ -229,7 +251,7 @@ public class MangaController {
                     }
 
                     Genre foundGenre = genreRepository.findById(g.getId())
-                            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Genre not found: ID " + g.getId()));
+                            .orElseThrow(() -> new senac.tsi.mangaVW.exceptions.GenreNotFoundException(g.getId()));
                     fetchedGenres.add(foundGenre);
                 }
                 manga.setGenres(fetchedGenres);
@@ -256,9 +278,11 @@ public class MangaController {
     @Operation(summary = "Delete a manga", description = "Permanently deletes a manga. All associated chapters, pages, and technical details will be cascaded and deleted automatically.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Deleted successfully"),
-            @ApiResponse(responseCode = "400", description = "Invalid ID format"),
+            @ApiResponse(responseCode = "400", description = "Invalid ID format (must be a number)",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Manga not found")
     })
+    @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteManga(@PathVariable long id){
         if(!mangaRepository.existsById(id)){

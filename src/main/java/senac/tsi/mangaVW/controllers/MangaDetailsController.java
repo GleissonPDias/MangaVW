@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import senac.tsi.mangaVW.entities.MangaDetails;
 import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.MangaDetailsNotFoundException;
+import senac.tsi.mangaVW.infrastructure.RateLimit;
 import senac.tsi.mangaVW.repositories.MangaDetailsRepository;
 import senac.tsi.mangaVW.repositories.MangaRepository;
 
@@ -33,6 +34,7 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @RequestMapping("/manga-details")
 @ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
         content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
+@ApiResponse(responseCode = "429", description = "Too Many Requests: Rate limit exceeded", content = @Content)
 public class MangaDetailsController {
 
     private final MangaDetailsRepository detailsRepository;
@@ -48,12 +50,13 @@ public class MangaDetailsController {
         this.mangaRepository = mangaRepository;
     }
 
-    // 🚀 AQUI ESTÁ A MÁGICA: Um único método faz o "Get All" e o "Filter"
+
     @Operation(summary = "Get all manga details", description = "Retrieves a paginated list of all technical metadata records. You can optionally filter by licensing status (true/false).")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Search/List completed successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid search parameters"),
     })
+    @RateLimit()
     @GetMapping
     public ResponseEntity<PagedModel<EntityModel<MangaDetails>>> getAllDetails(
             @RequestParam(required = false) Boolean licensed,
@@ -79,6 +82,7 @@ public class MangaDetailsController {
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
             @ApiResponse(responseCode = "404", description = "Manga details ID does not exist")
     })
+    @RateLimit(capacity = 40)
     @GetMapping("/{id}")
     public ResponseEntity<EntityModel<MangaDetails>> getDetailsById(@PathVariable long id) {
         var details = detailsRepository.findById(id)
@@ -93,6 +97,7 @@ public class MangaDetailsController {
             @ApiResponse(responseCode = "400", description = "Malformed JSON"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Send the technical data of the manga",
             content = @Content(mediaType = "application/json",
@@ -116,8 +121,10 @@ public class MangaDetailsController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Manga details updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid JSON provided"),
-            @ApiResponse(responseCode = "404", description = "Manga details not found")
+            @ApiResponse(responseCode = "404", description = "Manga details not found"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Update the ISBN, Publication Year, or Licensed status",
             content = @Content(mediaType = "application/json",
@@ -147,6 +154,7 @@ public class MangaDetailsController {
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
             @ApiResponse(responseCode = "404", description = "Manga details not found")
     })
+    @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
     @jakarta.transaction.Transactional // Garante a exclusão segura
     public ResponseEntity<Void> deleteDetails(@PathVariable long id) {
@@ -169,7 +177,6 @@ public class MangaDetailsController {
                 linkTo(methodOn(MangaDetailsController.class).getDetailsById(details.getId())).withSelfRel(),
                 linkTo(methodOn(MangaDetailsController.class).updateDetails(details.getId(), null)).withRel("update"),
                 linkTo(methodOn(MangaDetailsController.class).deleteDetails(details.getId())).withRel("delete"),
-                // 👇 AQUI: Passamos 'null' para os dois parâmetros que o getAllDetails agora pede (licensed e pageable)
                 linkTo(methodOn(MangaDetailsController.class).getAllDetails(null, null)).withRel("all-details"));
     }
 }

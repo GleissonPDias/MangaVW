@@ -16,23 +16,28 @@ public class MangaDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @JsonProperty(access = JsonProperty.Access.READ_WRITE)
-    @Schema(description = "ID únicos dos detalhes", example = "28")
+    @Schema(description = "Unique details ID", example = "28")
     private long id;
 
     @Size(max = 20)
-    @Schema(nullable = true,type = "string", description = "Código de barras internacional do manga", example = "205-534-1-325")
+    @Schema(nullable = true, type = "string", description = "International Standard Book Number of the manga", example = "205-534-1-325")
     private String isbn;
 
 
 
-    @Min(1900)
-    @Max(2100)
-    @Schema(description = "Ano em que o mangá começou a ser publicado", example = "2011")
+    @Min(value = 1900)
+    @Max(value = 2100)
+    @Schema(description = "Year the manga was published", example = "2011")
     private int publicationYear;
 
 
-    @Schema(description = "A obra tem licenciamento oficial no pais?", example = "true")
+    @Schema(description = "Is the work officially licensed in the country?", example = "true")
     private boolean licensed;
+
+    @jakarta.persistence.OneToOne(mappedBy = "details")
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties({"details"})
+    @Schema(description = "Manga to which these details belong")
+    private Manga manga;
 
     public MangaDetails() {}
 
@@ -54,6 +59,9 @@ public class MangaDetails {
     public void setPublicationYear(int publicationYear) { this.publicationYear = publicationYear; }
     public boolean isLicensed() { return licensed; }
     public void setLicensed(boolean licensed) { this.licensed = licensed; }
+
+    public Manga getManga() { return manga; }
+    public void setManga(Manga manga) { this.manga = manga; }
 
     @Override
     public boolean equals(Object o) {

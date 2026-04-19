@@ -20,6 +20,7 @@ import senac.tsi.mangaVW.entities.Genre;
 import senac.tsi.mangaVW.entities.Manga;
 import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.GenreNotFoundException;
+import senac.tsi.mangaVW.infrastructure.RateLimit;
 import senac.tsi.mangaVW.repositories.GenreRepository;
 import senac.tsi.mangaVW.repositories.MangaRepository;
 
@@ -35,6 +36,7 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @RequestMapping("/genres")
 @ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
         content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
+@ApiResponse(responseCode = "429", description = "Too Many Requests: Rate limit exceeded", content = @Content)
 public class GenreController {
 
     private final GenreRepository genreRepository;
@@ -55,6 +57,7 @@ public class GenreController {
             @ApiResponse(responseCode = "200", description = "List returned successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid parameters")
     })
+    @RateLimit()
     @GetMapping
     public ResponseEntity<PagedModel<EntityModel<Genre>>> getAllGenres(@ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
         var genres = genreRepository.findAll(pageable);
@@ -66,6 +69,7 @@ public class GenreController {
             @ApiResponse(responseCode = "200", description = "Search completed successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid search URL"),
     })
+    @RateLimit(capacity = 2)
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Genre>>> searchGenresByName(
             @RequestParam String name, @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
@@ -79,6 +83,7 @@ public class GenreController {
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
             @ApiResponse(responseCode = "404", description = "Genre not found in the database")
     })
+    @RateLimit(capacity = 40)
     @GetMapping("/{id}")
     public ResponseEntity<EntityModel<Genre>> getGenreById(@PathVariable long id) {
         var genre = genreRepository.findById(id).orElseThrow(() -> new GenreNotFoundException(id));
@@ -91,6 +96,7 @@ public class GenreController {
             @ApiResponse(responseCode = "400", description = "Malformed JSON"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Send only the genre name",
             content = @io.swagger.v3.oas.annotations.media.Content(
@@ -116,8 +122,10 @@ public class GenreController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Genre updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid JSON provided in the request"),
-            @ApiResponse(responseCode = "404", description = "The genre you are trying to update does not exist")
+            @ApiResponse(responseCode = "404", description = "The genre you are trying to update does not exist"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Update the genre name. Linked mangas are not altered by this route",
             content = @io.swagger.v3.oas.annotations.media.Content(
@@ -146,6 +154,7 @@ public class GenreController {
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
             @ApiResponse(responseCode = "404", description = "The informed genre does not exist in the database"),
     })
+    @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
     @jakarta.transaction.Transactional
     public ResponseEntity<Void> deleteGenre(@PathVariable long id) {

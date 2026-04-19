@@ -32,7 +32,7 @@ public class Manga {
 
     @NotBlank
     @Size(min=1, max=255)
-    @Schema(description = "Synopsis of the manga", example = "Um jovem deliquente chamado Sakuragi...")
+    @Schema(description = "Synopsis of the manga", example = "A young delinquent named Sakuragi...")
     private String sinopsis;
 
     @NotNull
@@ -45,19 +45,19 @@ public class Manga {
     @OneToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "manga_details_id", referencedColumnName = "id")
     @JsonIgnoreProperties("manga")
-    @Schema(description = "Detalhes técnicos de publicação do mangá")
+    @Schema(description = "Technical publication details of the manga")
     private MangaDetails details;
 
-    @NotNull(message = "O mangá precisa ter um autor vinculado")
+    @NotNull(message = "The manga must have a linked author")
     @ManyToOne
     @JoinColumn(name = "author_id", nullable = false)
     @JsonIgnoreProperties("mangas")
-    @Schema(description = "Autor responsável pela obra")
+    @Schema(description = "Author responsible for the work")
     private Author author;
 
     @OneToMany(mappedBy = "manga", cascade = CascadeType.ALL)
     @JsonIgnoreProperties({"manga", "pages"})
-    @Schema(description = "Lista de capítulos lançados para este mangá")
+    @Schema(description = "List of chapters released for this manga")
     private List<Chapter> chapters = new ArrayList<>();
 
 
@@ -68,7 +68,7 @@ public class Manga {
             inverseJoinColumns = @JoinColumn(name = "genre_id") // A chave estrangeira da outra classe (Genre)
     )
     @JsonIgnoreProperties("mangas")
-    @Schema(description = "Lista de gêneros deste mangá")
+    @Schema(description = "List of genres for this manga")
     private List<Genre> genres = new ArrayList<>();
 
     public List<Genre> getGenres() {

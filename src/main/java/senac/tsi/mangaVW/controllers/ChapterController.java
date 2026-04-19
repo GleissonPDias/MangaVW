@@ -22,6 +22,7 @@ import senac.tsi.mangaVW.entities.Manga;
 import senac.tsi.mangaVW.exceptions.ApiErrorResponse;
 import senac.tsi.mangaVW.exceptions.ChapterNotFoundException;
 import senac.tsi.mangaVW.exceptions.MangaNotFoundException;
+import senac.tsi.mangaVW.infrastructure.RateLimit;
 import senac.tsi.mangaVW.repositories.ChapterRepository;
 import senac.tsi.mangaVW.repositories.MangaRepository;
 
@@ -35,6 +36,7 @@ import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
 @RequestMapping("/chapters")
 @ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
         content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
+@ApiResponse(responseCode = "429", description = "Too Many Requests: Rate limit exceeded", content = @Content)
 public class ChapterController {
 
     private final ChapterRepository chapterRepository;
@@ -53,6 +55,7 @@ public class ChapterController {
             @ApiResponse(responseCode = "200", description = "List returned successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid parameters")
     })
+    @RateLimit()
     @GetMapping
     public ResponseEntity<PagedModel<EntityModel<Chapter>>> getAllChapters(@ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
         var chapters = chapterRepository.findAll(pageable);
@@ -64,6 +67,7 @@ public class ChapterController {
             @ApiResponse(responseCode = "200", description = "Search completed successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid search URL"),
     })
+    @RateLimit(capacity = 2)
     @GetMapping("/search")
     public ResponseEntity<PagedModel<EntityModel<Chapter>>> searchChaptersByLanguage(
             @RequestParam String language, @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
@@ -77,11 +81,10 @@ public class ChapterController {
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
             @ApiResponse(responseCode = "404", description = "Chapter not found in the database")
     })
+    @RateLimit(capacity = 40)
     @GetMapping("/{id}")
     public ResponseEntity<EntityModel<Chapter>> getChapterById(@PathVariable long id) {
         var chapter = chapterRepository.findById(id).orElseThrow(() -> new ChapterNotFoundException(id));
-
-        // Utilizando o método auxiliar para HATEOAS
         return ResponseEntity.ok(toEntityModel(chapter));
     }
 
@@ -90,7 +93,9 @@ public class ChapterController {
             @ApiResponse(responseCode = "201", description = "Chapter created successfully in the database"),
             @ApiResponse(responseCode = "400", description = "Malformed JSON or missing Manga ID"),
             @ApiResponse(responseCode = "404", description = "The provided Manga does not exist in the database"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
             description = "Send chapter data and only the desired manga ID",
             content = @Content(
@@ -101,18 +106,7 @@ public class ChapterController {
                                       "chapterNumber": 10.5,
                                       "language": "pt-br",
                                       "manga": {
-                                        "id": 1,
-                                        "title": "Berserk",
-                                        "sinopsis": "A história de Guts...",
-                                        "status": "FINALIZADO",
-                                        "author": {
-                                            "id": 1,
-                                            "name": "Kentaro Miura",
-                                            "biography": "Criador de Berserk"
-                                        },
-                                        "genres": [
-                                            { "id": 1, "name": "Ação" }
-                                        ]
+                                        "id": 1
                                       }
                                     }
                                     """
@@ -141,10 +135,12 @@ public class ChapterController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Chapter updated successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid JSON provided in the request"),
-            @ApiResponse(responseCode = "404", description = "The chapter you are trying to update does not exist")
+            @ApiResponse(responseCode = "404", description = "The chapter you are trying to update does not exist"),
+            @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
+    @RateLimit(capacity = 10, minutes = 5)
     @io.swagger.v3.oas.annotations.parameters.RequestBody(
-            description = "Send only the chapter fields to be updated (the link with the manga is not changed here).",
+            description = "Send only the chapter fields to be updated. Optionally send the Manga ID to transfer this chapter.",
             content = @Content(
                     mediaType = "application/json",
                     examples = @ExampleObject(
@@ -153,18 +149,7 @@ public class ChapterController {
                                       "chapterNumber": 10.5,
                                       "language": "pt-br",
                                       "manga": {
-                                        "id": 1,
-                                        "title": "Berserk",
-                                        "sinopsis": "A história de Guts...",
-                                        "status": "FINALIZADO",
-                                        "author": {
-                                            "id": 1,
-                                            "name": "Kentaro Miura",
-                                            "biography": "Criador de Berserk"
-                                        },
-                                        "genres": [
-                                            { "id": 1, "name": "Ação" }
-                                        ]
+                                        "id": 1
                                       }
                                     }
                                     """
@@ -176,6 +161,12 @@ public class ChapterController {
         return chapterRepository.findById(id).map(chapter -> {
             chapter.setChapterNumber(updatedChapter.getChapterNumber());
             chapter.setLanguage(updatedChapter.getLanguage());
+
+            if (updatedChapter.getManga() != null && updatedChapter.getManga().getId() != null) {
+                Manga newManga = mangaRepository.findById(updatedChapter.getManga().getId())
+                        .orElseThrow(() -> new MangaNotFoundException(updatedChapter.getManga().getId()));
+                chapter.setManga(newManga);
+            }
 
             Chapter savedChapter = chapterRepository.save(chapter);
 
@@ -190,6 +181,7 @@ public class ChapterController {
             @ApiResponse(responseCode = "400", description = "Invalid ID format"),
             @ApiResponse(responseCode = "404", description = "The informed chapter does not exist in the database"),
     })
+    @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteChapter(@PathVariable long id) {
         if (!chapterRepository.existsById(id)) {

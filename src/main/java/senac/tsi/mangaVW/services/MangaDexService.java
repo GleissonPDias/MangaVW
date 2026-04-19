@@ -36,7 +36,7 @@ public class MangaDexService {
 
     public void syncMangasFromMangaDex() throws Exception {
         // 1. URL super turbinada: Pedindo os dados do Mangá + Autor + Capa (cover_art)
-        String url = "https://api.mangadex.org/manga?limit=10&includes[]=author&includes[]=cover_art";
+        String url = "https://api.mangadex.org/manga?limit=50&includes[]=author&includes[]=cover_art";
 
         String jsonString = restTemplate.getForObject(url, String.class);
         ObjectMapper mapper = new ObjectMapper();

@@ -37,6 +37,27 @@ import java.util.List;
                         
                         ### 🛠️ Tech Stack
                         **Java 17** | **Spring Boot 3** | **Spring Data JPA** | **H2 Database** | **Springdoc OpenAPI**
+                        
+                        ---
+                        
+                        ### ⚖️ Rate Limits (Bucket4j)
+                        The MangaVW API implements strict, IP-based rate limiting to prevent abuse and ensure high availability. The application uses a hard-interval algorithm (tokens replenish strictly at the end of the time window).
+                        
+                        * **`GET` (List Operations)**: 20 requests per minute
+                        
+                        * **`GET` (Lookup by ID)**: 40 requests per minute
+
+                        * **`GET` (Search Operations)**: 2 requests per minute
+
+                        * **`POST` / `PUT` (Write Operations)**: 10 requests per 5 minutes
+
+                        * **`DELETE`**: 5 requests per 10 minutes
+
+                        * **`/sync` (External fetch)**: 1 request per 30 minutes
+                        
+                        Submitting excessive requests to the API server will result in an **HTTP 429 Too Many Requests** status code.
+                        
+                        It is not acceptable to ignore HTTP 429 responses. Continuing to overload the API after receiving a 429 status will result in your IP remaining blackholed until your time window expires.
                         """,
                 contact = @Contact(
                         name = "Gleisson",
@@ -75,8 +96,7 @@ public class OpenApiConfig implements WebMvcConfigurer { // ⬅️ Adicionado "i
             String methodName = handlerMethod.getMethod().getName();
 
             if (methodName.startsWith("getAll") ||
-                    methodName.startsWith("search") ||
-                    methodName.startsWith("create")) {
+                    methodName.startsWith("search")) {
 
                 operation.getResponses().remove("404");
             }
