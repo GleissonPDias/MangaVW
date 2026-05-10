@@ -1,5 +1,10 @@
 package senac.tsi.mangaVW.infrastructure;
 
+import io.swagger.v3.oas.annotations.enums.SecuritySchemeIn;
+import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityScheme;
+
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Contact;
 import io.swagger.v3.oas.annotations.info.Info;
@@ -23,7 +28,7 @@ import java.util.List;
 @OpenAPIDefinition(
         info = @Info(
                 title = "MangaVW API",
-                version = "1.0.0",
+                version = "1",
                 description = """
                         **RESTful API for Comprehensive Manga Catalog Management.**
                         
@@ -68,7 +73,15 @@ import java.util.List;
                         name = "MIT License",
                         url = "https://opensource.org/licenses/MIT"
                 )
-        )
+        ),
+        security = @SecurityRequirement(name = "ApiKey")
+)
+@SecurityScheme(
+        name = "ApiKey",
+        type = SecuritySchemeType.APIKEY,
+        in = SecuritySchemeIn.HEADER,
+        paramName = "X-API-Key",
+        description = "Chave de autenticação necessária para rotas de escrita."
 )
 // 🛡️ Garante suporte a paginação moderna e DTOs
 @EnableSpringDataWebSupport(pageSerializationMode = EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO)
@@ -99,6 +112,16 @@ public class OpenApiConfig implements WebMvcConfigurer { // ⬅️ Adicionado "i
                     methodName.startsWith("search")) {
 
                 operation.getResponses().remove("404");
+            }
+            
+            // Clean up X-API-Version parameter to prevent "1.0.0" from showing in Swagger
+            if (operation.getParameters() != null) {
+                operation.getParameters().forEach(param -> {
+                    if ("X-API-Version".equals(param.getName()) && param.getSchema() != null) {
+                        param.getSchema().setEnum(new java.util.ArrayList<>(java.util.List.of("1", "2")));
+                        param.getSchema().setDefault("1");
+                    }
+                });
             }
 
             return operation;

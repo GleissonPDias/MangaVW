@@ -35,8 +35,8 @@ public class MangaDexService {
     }
 
     public void syncMangasFromMangaDex() throws Exception {
-        // 1. URL super turbinada: Pedindo os dados do Mangá + Autor + Capa (cover_art)
-        String url = "https://api.mangadex.org/manga?limit=50&includes[]=author&includes[]=cover_art";
+        // 1. URL super turbinada: Pedindo os dados do Mangá + Autor + Capa (cover_art) ordenado pelos mais populares
+        String url = "https://api.mangadex.org/manga?limit=30&includes[]=author&includes[]=cover_art&order[followedCount]=desc";
 
         String jsonString = restTemplate.getForObject(url, String.class);
         ObjectMapper mapper = new ObjectMapper();
@@ -120,19 +120,35 @@ public class MangaDexService {
                         manga = mangaRepository.save(manga); // Atualiza o mangá com a lista de gêneros
                     }
 
-                    // --- 7. IMAGEM (Capítulo e Página) ---
-                    if (coverFileName != null) {
-                        // A URL oficial de imagens do MangaDex
-                        String imageUrl = "https://uploads.mangadex.org/covers/" + mangaId + "/" + coverFileName;
+                    // --- 7. CAPÍTULOS E IMAGEM ---
+                    int totalChapters = 1;
+                    if (attributes.has("lastChapter") && !attributes.get("lastChapter").isNull() && !attributes.get("lastChapter").asText().isEmpty()) {
+                        try {
+                            totalChapters = (int) Math.ceil(Double.parseDouble(attributes.get("lastChapter").asText()));
+                        } catch (NumberFormatException e) {
+                            totalChapters = 1;
+                        }
+                    }
+                    if (totalChapters < 1) totalChapters = 1; // Garante pelo menos 1
 
-                        // Cria o Capítulo 1
-                        Chapter chapter = new Chapter(1.0, "en");
+                    Chapter firstChapter = null;
+                    
+                    // Cria os capítulos de 1 até totalChapters
+                    for (int i = 1; i <= totalChapters; i++) {
+                        Chapter chapter = new Chapter((double) i, "en");
                         chapter.setManga(manga);
                         chapter = chapterRepository.save(chapter);
+                        
+                        if (i == 1) {
+                            firstChapter = chapter;
+                        }
+                    }
 
-                        // Cria a Página 1 com a Imagem
+                    // Se tiver capa, atrela à Página 1 do Capítulo 1
+                    if (coverFileName != null && firstChapter != null) {
+                        String imageUrl = "https://uploads.mangadex.org/covers/" + mangaId + "/" + coverFileName;
                         Page page = new Page(1, imageUrl);
-                        page.setChapter(chapter);
+                        page.setChapter(firstChapter);
                         pageRepository.save(page);
                     }
 

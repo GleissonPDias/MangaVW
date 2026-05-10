@@ -1,5 +1,7 @@
 package senac.tsi.mangaVW.controllers;
 
+import senac.tsi.mangaVW.infrastructure.RequireApiKey;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -37,6 +39,12 @@ public class AuthorController {
 
     private final AuthorRepository authorRepository;
     private final PagedResourcesAssembler<Author> pagedResourcesAssembler;
+
+    private final java.util.Map<String, IdempotentCreateResponse> createResponses = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Object createIdempotencyLock = new Object();
+
+    private record CreateAuthorFingerprint(String name) {}
+    private record IdempotentCreateResponse(CreateAuthorFingerprint requestFingerprint, Author author, URI location) {}
 
     @Autowired
     public AuthorController(AuthorRepository authorRepository,
@@ -90,6 +98,8 @@ public class AuthorController {
     @Operation(summary = "Create a new author", description = "Registers a new author in the system. Requires a valid name and biography. Returns the created resource location.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Author created successfully in the database"),
+            @ApiResponse(responseCode = "400", description = "Invalid input provided or missing Idempotency-Key"),
+            @ApiResponse(responseCode = "409", description = "Idempotency key already used with a different payload"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
     @RateLimit(capacity = 10, minutes = 5)
@@ -108,13 +118,46 @@ public class AuthorController {
             )
     )
     @PostMapping
-    public ResponseEntity<EntityModel<Author>> createAuthor(@Valid @RequestBody Author newAuthor) {
-        Author savedAuthor = authorRepository.save(newAuthor);
+    @RequireApiKey
+    public ResponseEntity<EntityModel<Author>> createAuthor(@Valid @RequestBody Author newAuthor,
+                                                            @io.swagger.v3.oas.annotations.Parameter(description = "Required key used to make repeated create requests idempotent", required = true)
+                                                            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
 
-        // Retorna o 201 Created junto com o EntityModel contendo os links
-        return ResponseEntity
-                .created(URI.create("/authors/" + savedAuthor.getId()))
-                .body(toEntityModel(savedAuthor));
+        var requestFingerprint = new CreateAuthorFingerprint(newAuthor.getName());
+
+        synchronized (createIdempotencyLock) {
+            var storedResponse = createResponses.get(idempotencyKey);
+
+            if (storedResponse != null) {
+                if (!storedResponse.requestFingerprint().equals(requestFingerprint)) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).build();
+                }
+                return ResponseEntity.created(storedResponse.location())
+                        .body(toEntityModel(copyOf(storedResponse.author())));
+            }
+
+            Author savedAuthor = authorRepository.save(newAuthor);
+            URI location = URI.create("/authors/" + savedAuthor.getId());
+
+            createResponses.put(idempotencyKey, new IdempotentCreateResponse(
+                    requestFingerprint,
+                    copyOf(savedAuthor),
+                    location
+            ));
+
+            return ResponseEntity.created(location).body(toEntityModel(savedAuthor));
+        }
+    }
+
+    private Author copyOf(Author author) {
+        Author copy = new Author();
+        copy.setId(author.getId());
+        copy.setName(author.getName());
+        copy.setBiography(author.getBiography());
+        return copy;
     }
 
     @Operation(summary = "Update an author", description = "Updates the biographical information of an existing author. Linked mangas are preserved and not affected by this operation.")
@@ -140,6 +183,7 @@ public class AuthorController {
             )
     )
     @PutMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<EntityModel<Author>> updateAuthor(@PathVariable long id, @Valid @RequestBody Author updatedAuthor) {
         return authorRepository.findById(id).map(author -> {
             author.setName(updatedAuthor.getName());
@@ -161,6 +205,7 @@ public class AuthorController {
     })
     @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<Void> deleteAuthor(@PathVariable long id) {
         if (!authorRepository.existsById(id)) {
             throw new AuthorNotFoundException(id);

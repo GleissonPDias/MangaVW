@@ -1,5 +1,7 @@
 package senac.tsi.mangaVW.controllers;
 
+import senac.tsi.mangaVW.infrastructure.RequireApiKey;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -40,6 +42,12 @@ public class MangaDetailsController {
     private final MangaDetailsRepository detailsRepository;
     private final PagedResourcesAssembler<MangaDetails> pagedResourcesAssembler;
     private final MangaRepository mangaRepository;
+
+    private final java.util.Map<String, IdempotentCreateResponse> createResponses = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Object createIdempotencyLock = new Object();
+
+    private record CreateDetailsFingerprint(String isbn, Integer publicationYear, boolean licensed) {}
+    private record IdempotentCreateResponse(CreateDetailsFingerprint requestFingerprint, MangaDetails details, URI location) {}
 
     @Autowired
     public MangaDetailsController(MangaDetailsRepository detailsRepository,
@@ -94,7 +102,8 @@ public class MangaDetailsController {
     @Operation(summary = "Create manga details", description = "Creates a standalone technical details record which can later be attached to a manga entity.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Manga details created successfully"),
-            @ApiResponse(responseCode = "400", description = "Malformed JSON"),
+            @ApiResponse(responseCode = "400", description = "Invalid input provided or missing Idempotency-Key"),
+            @ApiResponse(responseCode = "409", description = "Idempotency key already used with a different payload"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
     @RateLimit(capacity = 10, minutes = 5)
@@ -109,12 +118,47 @@ public class MangaDetailsController {
                             }
                             """)))
     @PostMapping
-    public ResponseEntity<EntityModel<MangaDetails>> createDetails(@Valid @RequestBody MangaDetails newDetails) {
-        MangaDetails savedDetails = detailsRepository.save(newDetails);
+    @RequireApiKey
+    public ResponseEntity<EntityModel<MangaDetails>> createDetails(@Valid @RequestBody MangaDetails newDetails,
+                                                                   @io.swagger.v3.oas.annotations.Parameter(description = "Required key used to make repeated create requests idempotent", required = true)
+                                                                   @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
 
-        return ResponseEntity
-                .created(URI.create("/manga-details/" + savedDetails.getId()))
-                .body(toEntityModel(savedDetails));
+        var requestFingerprint = new CreateDetailsFingerprint(newDetails.getIsbn(), newDetails.getPublicationYear(), newDetails.isLicensed());
+
+        synchronized (createIdempotencyLock) {
+            var storedResponse = createResponses.get(idempotencyKey);
+
+            if (storedResponse != null) {
+                if (!storedResponse.requestFingerprint().equals(requestFingerprint)) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).build();
+                }
+                return ResponseEntity.created(storedResponse.location())
+                        .body(toEntityModel(copyOf(storedResponse.details())));
+            }
+
+            MangaDetails savedDetails = detailsRepository.save(newDetails);
+            URI location = URI.create("/manga-details/" + savedDetails.getId());
+
+            createResponses.put(idempotencyKey, new IdempotentCreateResponse(
+                    requestFingerprint,
+                    copyOf(savedDetails),
+                    location
+            ));
+
+            return ResponseEntity.created(location).body(toEntityModel(savedDetails));
+        }
+    }
+
+    private MangaDetails copyOf(MangaDetails details) {
+        MangaDetails copy = new MangaDetails();
+        copy.setId(details.getId());
+        copy.setIsbn(details.getIsbn());
+        copy.setPublicationYear(details.getPublicationYear());
+        copy.setLicensed(details.isLicensed());
+        return copy;
     }
 
     @Operation(summary = "Update manga details", description = "Updates the ISBN, publication year, or licensing status of an existing details record.")
@@ -136,6 +180,7 @@ public class MangaDetailsController {
                             }
                             """)))
     @PutMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<EntityModel<MangaDetails>> updateDetails(@PathVariable long id, @Valid @RequestBody MangaDetails updatedDetails) {
         return detailsRepository.findById(id).map(details -> {
             details.setIsbn(updatedDetails.getIsbn());
@@ -156,6 +201,7 @@ public class MangaDetailsController {
     })
     @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
+    @RequireApiKey
     @jakarta.transaction.Transactional // Garante a exclusão segura
     public ResponseEntity<Void> deleteDetails(@PathVariable long id) {
         MangaDetails details = detailsRepository.findById(id)

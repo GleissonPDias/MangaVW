@@ -1,5 +1,7 @@
 package senac.tsi.mangaVW.controllers;
 
+import senac.tsi.mangaVW.infrastructure.RequireApiKey;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -43,6 +45,12 @@ public class PageController {
     private final PageRepository pageRepository;
     private final PagedResourcesAssembler<Page> pagedResourcesAssembler;
     private final ChapterRepository chapterRepository;
+
+    private final java.util.Map<String, IdempotentCreateResponse> createResponses = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Object createIdempotencyLock = new Object();
+
+    private record CreatePageFingerprint(Integer pageNumber, String imageUrl, Long chapterId) {}
+    private record IdempotentCreateResponse(CreatePageFingerprint requestFingerprint, Page page, URI location) {}
 
     @Autowired
     public PageController(PageRepository pageRepository, PagedResourcesAssembler<Page> pagedResourcesAssembler, ChapterRepository chapterRepository) {
@@ -90,7 +98,9 @@ public class PageController {
     @Operation(summary = "Create a new page", description = "Adds a new page to an existing chapter. The full hierarchy is simulated in the example to pass validation.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Page created successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid input provided or missing Idempotency-Key"),
             @ApiResponse(responseCode = "404", description = "The Chapter does not exist"),
+            @ApiResponse(responseCode = "409", description = "Idempotency key already used with a different payload"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
     @RateLimit(capacity = 10, minutes = 5)
@@ -107,15 +117,55 @@ public class PageController {
                             }
                             """)))
     @PostMapping
-    public ResponseEntity<EntityModel<Page>> createPage(@Valid @RequestBody Page newPage) {
+    @RequireApiKey
+    public ResponseEntity<EntityModel<Page>> createPage(@Valid @RequestBody Page newPage,
+                                                        @io.swagger.v3.oas.annotations.Parameter(description = "Required key used to make repeated create requests idempotent", required = true)
+                                                        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+
         if(newPage.getChapter() == null || newPage.getChapter().getId() == null){
             return ResponseEntity.badRequest().build();
         }
-        Chapter chapter = chapterRepository.findById(newPage.getChapter().getId())
-                .orElseThrow(() -> new ChapterNotFoundException(newPage.getChapter().getId()));
-        newPage.setChapter(chapter);
-        Page savedPage = pageRepository.save(newPage);
-        return ResponseEntity.created(URI.create("/pages/" + savedPage.getId())).body(toEntityModel(savedPage));
+
+        var requestFingerprint = new CreatePageFingerprint(newPage.getPageNumber(), newPage.getImageUrl(), newPage.getChapter().getId());
+
+        synchronized (createIdempotencyLock) {
+            var storedResponse = createResponses.get(idempotencyKey);
+
+            if (storedResponse != null) {
+                if (!storedResponse.requestFingerprint().equals(requestFingerprint)) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).build();
+                }
+                return ResponseEntity.created(storedResponse.location())
+                        .body(toEntityModel(copyOf(storedResponse.page())));
+            }
+
+            Chapter chapter = chapterRepository.findById(newPage.getChapter().getId())
+                    .orElseThrow(() -> new ChapterNotFoundException(newPage.getChapter().getId()));
+            newPage.setChapter(chapter);
+
+            Page savedPage = pageRepository.save(newPage);
+            URI location = URI.create("/pages/" + savedPage.getId());
+
+            createResponses.put(idempotencyKey, new IdempotentCreateResponse(
+                    requestFingerprint,
+                    copyOf(savedPage),
+                    location
+            ));
+
+            return ResponseEntity.created(location).body(toEntityModel(savedPage));
+        }
+    }
+
+    private Page copyOf(Page page) {
+        Page copy = new Page();
+        copy.setId(page.getId());
+        copy.setPageNumber(page.getPageNumber());
+        copy.setImageUrl(page.getImageUrl());
+        copy.setChapter(page.getChapter());
+        return copy;
     }
 
     @Operation(summary = "Update a page", description = "Updates the page number or image URL. The chapter link is immutable.")
@@ -137,6 +187,7 @@ public class PageController {
                             }
                             """)))
     @PutMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<EntityModel<Page>> updatePage(@PathVariable long id, @Valid @RequestBody Page updatedPage) {
         return pageRepository.findById(id).map(page -> {
             page.setPageNumber(updatedPage.getPageNumber());
@@ -159,6 +210,7 @@ public class PageController {
     })
     @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<Void> deletePage(@PathVariable long id) {
         if (!pageRepository.existsById(id))  {
             throw new PageNotFoundException(id);

@@ -83,11 +83,11 @@ public class LoadDatabase {
 
             // Pages
 
-            Page pag1Berserk = new Page(1, "https://exemplo.com/berserk/cap1/pag1.jpg");
+            Page pag1Berserk = new Page(1, "https://images.darkhorse.com/covers/600/30/3019656.jpg");
             pag1Berserk.setChapter(cap1Berserk); // Vínculo obrigatório com o Capítulo (Pai)
             pageRepository.save(pag1Berserk);
 
-            Page pag2Berserk = new Page(2, "https://exemplo.com/berserk/cap1/pag2.jpg");
+            Page pag2Berserk = new Page(2, "https://imusic.b-cdn.net/images/item/original/985/9781506703985.jpg?kentaro-miura-2017-berserk-volume-38-paperback-book&class=scaled&v=1584302259");
             pag2Berserk.setChapter(cap1Berserk);
             pageRepository.save(pag2Berserk);
 
@@ -100,7 +100,7 @@ public class LoadDatabase {
             pageRepository.save(pag4Berserk);
 
             // Criando uma Página para o Capítulo 1 de Bleach
-            Page pag1Bleach = new Page(1, "https://exemplo.com/bleach/cap1/pag1.jpg");
+            Page pag1Bleach = new Page(1, "https://i.pinimg.com/474x/c4/f7/57/c4f75735aa50783ef709a7eabeebb637.jpg");
             pag1Bleach.setChapter(cap1Bleach);
             pageRepository.save(pag1Bleach);
 

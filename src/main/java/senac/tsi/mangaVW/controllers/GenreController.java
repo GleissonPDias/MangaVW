@@ -1,5 +1,7 @@
 package senac.tsi.mangaVW.controllers;
 
+import senac.tsi.mangaVW.infrastructure.RequireApiKey;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -42,6 +44,12 @@ public class GenreController {
     private final GenreRepository genreRepository;
     private final PagedResourcesAssembler<Genre> pagedResourcesAssembler;
     private final MangaRepository mangaRepository; // Injetado para gerenciar o delete
+
+    private final java.util.Map<String, IdempotentCreateResponse> createResponses = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Object createIdempotencyLock = new Object();
+
+    private record CreateGenreFingerprint(String name) {}
+    private record IdempotentCreateResponse(CreateGenreFingerprint requestFingerprint, Genre genre, URI location) {}
 
     @Autowired
     public GenreController(GenreRepository genreRepository,
@@ -93,7 +101,8 @@ public class GenreController {
     @Operation(summary = "Create a new genre", description = "Registers a new genre classification. The name must be unique and properly formatted.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Genre created successfully in the database"),
-            @ApiResponse(responseCode = "400", description = "Malformed JSON"),
+            @ApiResponse(responseCode = "400", description = "Invalid input provided or missing Idempotency-Key"),
+            @ApiResponse(responseCode = "409", description = "Idempotency key already used with a different payload"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
     @RateLimit(capacity = 10, minutes = 5)
@@ -111,11 +120,45 @@ public class GenreController {
             )
     )
     @PostMapping
-    public ResponseEntity<EntityModel<Genre>> createGenre(@Valid @RequestBody Genre newGenre) {
-        Genre savedGenre = genreRepository.save(newGenre);
-        return ResponseEntity
-                .created(URI.create("/genres/" + savedGenre.getId()))
-                .body(toEntityModel(savedGenre));
+    @RequireApiKey
+    public ResponseEntity<EntityModel<Genre>> createGenre(@Valid @RequestBody Genre newGenre,
+                                                          @io.swagger.v3.oas.annotations.Parameter(description = "Required key used to make repeated create requests idempotent", required = true)
+                                                          @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        var requestFingerprint = new CreateGenreFingerprint(newGenre.getName());
+
+        synchronized (createIdempotencyLock) {
+            var storedResponse = createResponses.get(idempotencyKey);
+
+            if (storedResponse != null) {
+                if (!storedResponse.requestFingerprint().equals(requestFingerprint)) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).build();
+                }
+                return ResponseEntity.created(storedResponse.location())
+                        .body(toEntityModel(copyOf(storedResponse.genre())));
+            }
+
+            Genre savedGenre = genreRepository.save(newGenre);
+            URI location = URI.create("/genres/" + savedGenre.getId());
+
+            createResponses.put(idempotencyKey, new IdempotentCreateResponse(
+                    requestFingerprint,
+                    copyOf(savedGenre),
+                    location
+            ));
+
+            return ResponseEntity.created(location).body(toEntityModel(savedGenre));
+        }
+    }
+
+    private Genre copyOf(Genre genre) {
+        Genre copy = new Genre();
+        copy.setId(genre.getId());
+        copy.setName(genre.getName());
+        return copy;
     }
 
     @Operation(summary = "Update a genre", description = "Modifies the name of an existing genre. Mangas previously associated with this genre will automatically reflect the new name.")
@@ -140,6 +183,7 @@ public class GenreController {
             )
     )
     @PutMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<EntityModel<Genre>> updateGenre(@PathVariable long id, @Valid @RequestBody Genre updatedGenre) {
         return genreRepository.findById(id).map(genre -> {
             genre.setName(updatedGenre.getName());
@@ -156,6 +200,7 @@ public class GenreController {
     })
     @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
+    @RequireApiKey
     @jakarta.transaction.Transactional
     public ResponseEntity<Void> deleteGenre(@PathVariable long id) {
         Genre genre = genreRepository.findById(id)

@@ -1,5 +1,7 @@
 package senac.tsi.mangaVW.controllers;
 
+import senac.tsi.mangaVW.infrastructure.RequireApiKey;
+
 import senac.tsi.mangaVW.infrastructure.RateLimit;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -50,6 +52,12 @@ public class MangaController {
     private final GenreRepository genreRepository;
     private final MangaDexService mangaDexService;
 
+    private final java.util.Map<String, IdempotentCreateResponse> createResponses = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Object createIdempotencyLock = new Object();
+
+    private record CreateMangaFingerprint(String title, Long authorId) {}
+    private record IdempotentCreateResponse(CreateMangaFingerprint requestFingerprint, Manga manga, URI location) {}
+
     @Autowired
     public MangaController(MangaRepository mangaRepository,
                            PagedResourcesAssembler<Manga> pagedResourcesAssembler,
@@ -89,6 +97,7 @@ public class MangaController {
             @ApiResponse(responseCode = "200", description = "List returned successfully")
     })
     @PostMapping("/sync")
+    @RequireApiKey
     public ResponseEntity<String> syncFromMangaDex() {
         try {
             mangaDexService.syncMangasFromMangaDex();
@@ -99,19 +108,47 @@ public class MangaController {
         }
     }
 
-    @Operation(summary = "Get all mangas", description = "Retrieves a comprehensive, paginated list of all mangas available in the catalog, including their related entities (Author, Details).")
+    @Operation(summary = "Get all mangas (v1)", description = "Retrieves a comprehensive, paginated list of all mangas available in the catalog, including their related entities (Author, Details).")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List returned successfully"),
             @ApiResponse(responseCode = "400", description = "Invalid parameters",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
     })
     @RateLimit()
-    @GetMapping
-    public ResponseEntity<PagedModel<EntityModel<Manga>>> getAllMangas(
+    @GetMapping(version = "1")
+    public ResponseEntity<PagedModel<EntityModel<Manga>>> getAllMangasV1(
             @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
 
         var mangas = mangaRepository.findAll(pageable);
-        return ResponseEntity.ok(pagedResourcesAssembler.toModel(mangas, this::toEntityModel));
+        
+        // Mapeando para versões simplificadas (cópias seguras sem os dados ricos como autor, gêneros, etc)
+        var simplifiedMangas = mangas.map(m -> {
+            Manga simplified = new Manga();
+            simplified.setId(m.getId());
+            simplified.setTitle(m.getTitle());
+            simplified.setSinopsis(m.getSinopsis());
+            simplified.setStatus(m.getStatus());
+            return simplified;
+        });
+
+        return ResponseEntity.ok(pagedResourcesAssembler.toModel(simplifiedMangas, this::toEntityModel));
+    }
+
+    @Operation(summary = "Get all mangas (v2)", description = "Retrieves a comprehensive, paginated list of all mangas available in the catalog. Version 2 includes an experimental HTTP header.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "List returned successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid parameters",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
+    })
+    @RateLimit()
+    @GetMapping(version = "2")
+    public ResponseEntity<PagedModel<EntityModel<Manga>>> getAllMangasV2(
+            @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
+
+        var mangas = mangaRepository.findAll(pageable);
+        return ResponseEntity.ok()
+                .header("X-Experimental-Feature", "v2-active")
+                .body(pagedResourcesAssembler.toModel(mangas, this::toEntityModel));
     }
 
     @Operation(summary = "Get manga by ID", description = "Retrieves full details of a specific manga by its unique ID. The response is enriched with HATEOAS links for resource discoverability.")
@@ -133,9 +170,9 @@ public class MangaController {
     @Operation(summary = "Create a new manga", description = "Adds a new manga to the catalog. Requires an existing Author ID. Genres and technical details can be optionally linked during creation.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Manga created successfully"),
-            @ApiResponse(responseCode = "400", description = "Malformed JSON payload",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid input provided or missing Idempotency-Key"),
             @ApiResponse(responseCode = "404", description = "Author or Genre provided does not exist"),
+            @ApiResponse(responseCode = "409", description = "Idempotency key already used with a different payload"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
     @RateLimit(capacity = 10, minutes = 5)
@@ -162,36 +199,78 @@ public class MangaController {
                             }
                             """)))
     @PostMapping
-    public ResponseEntity<EntityModel<Manga>> createManga(@Valid @RequestBody Manga newManga){
+    @RequireApiKey
+    public ResponseEntity<EntityModel<Manga>> createManga(@Valid @RequestBody Manga newManga,
+                                                          @io.swagger.v3.oas.annotations.Parameter(description = "Required key used to make repeated create requests idempotent", required = true)
+                                                          @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey){
 
-        // 1. Busca e valida o Autor
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+
         if (newManga.getAuthor() == null || newManga.getAuthor().getId() == null) {
             return ResponseEntity.badRequest().build();
         }
-        Author author = authorRepository.findById(newManga.getAuthor().getId())
-                .orElseThrow(() -> new senac.tsi.mangaVW.exceptions.AuthorNotFoundException(newManga.getAuthor().getId()));
-        newManga.setAuthor(author);
 
-        // 2. Busca e valida a lista de Gêneros (se for enviada)
-        if (newManga.getGenres() != null && !newManga.getGenres().isEmpty()) {
-            List<Genre> fetchedGenres = new ArrayList<>();
-            for (Genre g : newManga.getGenres()) {
+        var requestFingerprint = new CreateMangaFingerprint(newManga.getTitle(), newManga.getAuthor().getId());
 
-                if(g.getId() == null){
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Genre ID cannot be null");
+        synchronized (createIdempotencyLock) {
+            var storedResponse = createResponses.get(idempotencyKey);
+
+            if (storedResponse != null) {
+                if (!storedResponse.requestFingerprint().equals(requestFingerprint)) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT).build();
                 }
-
-                Genre foundGenre = genreRepository.findById(g.getId())
-                        .orElseThrow(() -> new senac.tsi.mangaVW.exceptions.GenreNotFoundException(g.getId()));
-                fetchedGenres.add(foundGenre);
+                return ResponseEntity.created(storedResponse.location())
+                        .body(toEntityModel(copyOf(storedResponse.manga())));
             }
-            newManga.setGenres(fetchedGenres);
-        }
 
-        Manga savedManga = mangaRepository.save(newManga);
-        return ResponseEntity
-                .created(URI.create("/mangas/"+ savedManga.getId()))
-                .body(toEntityModel(savedManga));
+            // 1. Busca e valida o Autor
+            Author author = authorRepository.findById(newManga.getAuthor().getId())
+                    .orElseThrow(() -> new senac.tsi.mangaVW.exceptions.AuthorNotFoundException(newManga.getAuthor().getId()));
+            newManga.setAuthor(author);
+
+            // 2. Busca e valida a lista de Gêneros (se for enviada)
+            if (newManga.getGenres() != null && !newManga.getGenres().isEmpty()) {
+                List<Genre> fetchedGenres = new ArrayList<>();
+                for (Genre g : newManga.getGenres()) {
+
+                    if(g.getId() == null){
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Genre ID cannot be null");
+                    }
+
+                    Genre foundGenre = genreRepository.findById(g.getId())
+                            .orElseThrow(() -> new senac.tsi.mangaVW.exceptions.GenreNotFoundException(g.getId()));
+                    fetchedGenres.add(foundGenre);
+                }
+                newManga.setGenres(fetchedGenres);
+            }
+
+            Manga savedManga = mangaRepository.save(newManga);
+            URI location = URI.create("/mangas/"+ savedManga.getId());
+
+            createResponses.put(idempotencyKey, new IdempotentCreateResponse(
+                    requestFingerprint,
+                    copyOf(savedManga),
+                    location
+            ));
+
+            return ResponseEntity
+                    .created(location)
+                    .body(toEntityModel(savedManga));
+        }
+    }
+
+    private Manga copyOf(Manga manga) {
+        Manga copy = new Manga();
+        copy.setId(manga.getId());
+        copy.setTitle(manga.getTitle());
+        copy.setSinopsis(manga.getSinopsis());
+        copy.setStatus(manga.getStatus());
+        copy.setAuthor(manga.getAuthor());
+        copy.setDetails(manga.getDetails());
+        // Avoiding deep copy of chapters/pages here as it's just for returning the representation
+        return copy;
     }
 
     @Operation(summary = "Update a manga", description = "Updates the core metadata of an existing manga. Relationships with authors, genres, and details can be modified by providing their respective IDs.")
@@ -226,6 +305,7 @@ public class MangaController {
                             }
                         """)))
     @PutMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<EntityModel<Manga>> updateManga(@PathVariable long id, @Valid @RequestBody Manga updatedManga){
         return mangaRepository.findById(id).map(manga -> {
 
@@ -284,6 +364,7 @@ public class MangaController {
     })
     @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<Void> deleteManga(@PathVariable long id){
         if(!mangaRepository.existsById(id)){
             throw new MangaNotFoundException(id);
@@ -298,6 +379,6 @@ public class MangaController {
                 linkTo(methodOn(MangaController.class).getMangaById(manga.getId())).withSelfRel(),
                 linkTo(methodOn(MangaController.class).updateManga(manga.getId(), null)).withRel("update"),
                 linkTo(methodOn(MangaController.class).deleteManga(manga.getId())).withRel("delete"),
-                linkTo(methodOn(MangaController.class).getAllMangas(null)).withRel("mangas"));
+                linkTo(methodOn(MangaController.class).getAllMangasV1(null)).withRel("mangas"));
     }
 }

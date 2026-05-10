@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MangaVW - API Dashboard</title>
+    <!-- Google Fonts: Outfit -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+
+    <header class="glass-header">
+        <div class="container header-content">
+            <h1>Manga<span>VW</span></h1>
+            <div class="api-config">
+                <input type="text" id="apiKey" placeholder="Your X-API-Key" class="glass-input">
+                <button id="btnConfigure" class="btn-primary">Set Key</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="toolbar">
+            <h2>Manga Catalog</h2>
+            <button id="btnSync" class="btn-secondary">Sync from MangaDex (POST)</button>
+        </section>
+
+        <section id="errorPanel" class="error-panel hidden">
+            <h3 id="errorTitle">⚠️ CORS / Connection Error</h3>
+            <p id="errorMsg"></p>
+        </section>
+
+        <section id="mangaGrid" class="manga-grid">
+            <!-- Cards will be injected here via JS -->
+            <div class="glass-card skeleton">
+                <div class="skeleton-img"></div>
+                <div class="skeleton-text"></div>
+                <div class="skeleton-text short"></div>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

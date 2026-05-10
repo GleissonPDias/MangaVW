@@ -3,6 +3,7 @@ package senac.tsi.mangaVW.infrastructure;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Refill;
+import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
@@ -27,6 +28,11 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
 
+        // Ignora requisições de PREFLIGHT (CORS) para evitar bloqueios indevidos de Rate Limit
+        if (request.getMethod().equalsIgnoreCase("OPTIONS")) {
+            return true;
+        }
+
         // Verifica se a requisição está sendo enviada para um de nossos métodos Java do Controller
         if (handler instanceof HandlerMethod handlerMethod) {
 
@@ -47,8 +53,19 @@ public class RateLimitInterceptor implements HandlerInterceptor {
                 // 3. Resgata do cofre o Balde atual do usuário ou constrói um sob medida baseado na anotação!
                 Bucket userBucket = buckets.computeIfAbsent(bucketKey, key -> createNewBucket(rateLimit));
 
-                // 4. Regra da Catraca: Não tem token? Responde imediatamente com 429
-                if (!userBucket.tryConsume(1)) {
+                // 4. Regra da Catraca: Usando Probe para extrair limites e injetar cabeçalhos
+                ConsumptionProbe probe = userBucket.tryConsumeAndReturnRemaining(1);
+                
+                if (probe.isConsumed()) {
+                    response.addHeader("X-RateLimit-Limit", String.valueOf(rateLimit.capacity()));
+                    response.addHeader("X-RateLimit-Remaining", String.valueOf(probe.getRemainingTokens()));
+                } else {
+                    long waitForRefill = probe.getNanosToWaitForRefill() / 1_000_000_000;
+                    
+                    response.addHeader("X-RateLimit-Limit", String.valueOf(rateLimit.capacity()));
+                    response.addHeader("X-RateLimit-Remaining", "0");
+                    response.addHeader("Retry-After", String.valueOf(waitForRefill));
+                    
                     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value()); // HTTP 429
                     response.setContentType("application/json"); // <- Swagger agora fica feliz!
                     response.getWriter().write("{\"error\": \"Too Many Requests\", \"message\": \"Rate limit exceeded for this endpoint.\"}");

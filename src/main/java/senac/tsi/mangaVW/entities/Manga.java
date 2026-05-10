@@ -56,7 +56,7 @@ public class Manga {
     private Author author;
 
     @OneToMany(mappedBy = "manga", cascade = CascadeType.ALL)
-    @JsonIgnoreProperties({"manga", "pages"})
+    @JsonIgnoreProperties({"manga"})
     @Schema(description = "List of chapters released for this manga")
     private List<Chapter> chapters = new ArrayList<>();
 

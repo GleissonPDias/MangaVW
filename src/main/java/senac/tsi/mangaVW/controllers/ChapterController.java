@@ -1,5 +1,7 @@
 package senac.tsi.mangaVW.controllers;
 
+import senac.tsi.mangaVW.infrastructure.RequireApiKey;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -42,6 +44,12 @@ public class ChapterController {
     private final ChapterRepository chapterRepository;
     private final PagedResourcesAssembler<Chapter> pagedResourcesAssembler;
     private final MangaRepository mangaRepository;
+
+    private final java.util.Map<String, IdempotentCreateResponse> createResponses = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Object createIdempotencyLock = new Object();
+
+    private record CreateChapterFingerprint(Double chapterNumber, String language, Long mangaId) {}
+    private record IdempotentCreateResponse(CreateChapterFingerprint requestFingerprint, Chapter chapter, URI location) {}
 
     @Autowired
     public ChapterController(ChapterRepository chapterRepository, PagedResourcesAssembler<Chapter> pagedResourcesAssembler, MangaRepository mangaRepository) {
@@ -91,8 +99,9 @@ public class ChapterController {
     @Operation(summary = "Create a new chapter", description = "Registers a new chapter and links it to an existing manga. The manga ID must be provided in the request body.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Chapter created successfully in the database"),
-            @ApiResponse(responseCode = "400", description = "Malformed JSON or missing Manga ID"),
+            @ApiResponse(responseCode = "400", description = "Invalid input provided or missing Idempotency-Key"),
             @ApiResponse(responseCode = "404", description = "The provided Manga does not exist in the database"),
+            @ApiResponse(responseCode = "409", description = "Idempotency key already used with a different payload"),
             @ApiResponse(responseCode = "422", description = "Unprocessable Entity: Field validation error")
     })
     @RateLimit(capacity = 10, minutes = 5)
@@ -114,21 +123,55 @@ public class ChapterController {
             )
     )
     @PostMapping
-    public ResponseEntity<EntityModel<Chapter>> createChapter(@Valid @RequestBody Chapter newChapter) {
+    @RequireApiKey
+    public ResponseEntity<EntityModel<Chapter>> createChapter(@Valid @RequestBody Chapter newChapter,
+                                                              @io.swagger.v3.oas.annotations.Parameter(description = "Required key used to make repeated create requests idempotent", required = true)
+                                                              @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+
         if(newChapter.getManga() == null || newChapter.getManga().getId() == null) {
             return ResponseEntity.badRequest().build();
         }
 
-        Manga manga = mangaRepository.findById(newChapter.getManga().getId())
-                .orElseThrow(() -> new MangaNotFoundException(newChapter.getManga().getId()));
-        newChapter.setManga(manga);
+        var requestFingerprint = new CreateChapterFingerprint(newChapter.getChapterNumber(), newChapter.getLanguage(), newChapter.getManga().getId());
 
-        Chapter savedChapter = chapterRepository.save(newChapter);
+        synchronized (createIdempotencyLock) {
+            var storedResponse = createResponses.get(idempotencyKey);
 
-        // Retorna o 201 Created junto com o EntityModel contendo os links (e a URI corrigida para plural)
-        return ResponseEntity
-                .created(URI.create("/chapters/" + savedChapter.getId()))
-                .body(toEntityModel(savedChapter));
+            if (storedResponse != null) {
+                if (!storedResponse.requestFingerprint().equals(requestFingerprint)) {
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).build();
+                }
+                return ResponseEntity.created(storedResponse.location())
+                        .body(toEntityModel(copyOf(storedResponse.chapter())));
+            }
+
+            Manga manga = mangaRepository.findById(newChapter.getManga().getId())
+                    .orElseThrow(() -> new MangaNotFoundException(newChapter.getManga().getId()));
+            newChapter.setManga(manga);
+
+            Chapter savedChapter = chapterRepository.save(newChapter);
+            URI location = URI.create("/chapters/" + savedChapter.getId());
+
+            createResponses.put(idempotencyKey, new IdempotentCreateResponse(
+                    requestFingerprint,
+                    copyOf(savedChapter),
+                    location
+            ));
+
+            return ResponseEntity.created(location).body(toEntityModel(savedChapter));
+        }
+    }
+
+    private Chapter copyOf(Chapter chapter) {
+        Chapter copy = new Chapter();
+        copy.setId(chapter.getId());
+        copy.setChapterNumber(chapter.getChapterNumber());
+        copy.setLanguage(chapter.getLanguage());
+        copy.setManga(chapter.getManga());
+        return copy;
     }
 
     @Operation(summary = "Update a chapter", description = "Updates the chapter number or language. The relationship to its parent manga remains unchanged.")
@@ -157,6 +200,7 @@ public class ChapterController {
             )
     )
     @PutMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<EntityModel<Chapter>> updateChapter(@PathVariable long id, @Valid @RequestBody Chapter updatedChapter) {
         return chapterRepository.findById(id).map(chapter -> {
             chapter.setChapterNumber(updatedChapter.getChapterNumber());
@@ -183,6 +227,7 @@ public class ChapterController {
     })
     @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
+    @RequireApiKey
     public ResponseEntity<Void> deleteChapter(@PathVariable long id) {
         if (!chapterRepository.existsById(id)) {
             throw new ChapterNotFoundException(id);
