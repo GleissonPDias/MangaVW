@@ -137,7 +137,7 @@ function renderMangas(mangas) {
         }
         
         card.innerHTML = `
-            <img src="${coverUrl}" alt="Capa de ${manga.title}" class="manga-cover" onerror="this.src='https://via.placeholder.com/250x350/1e293b/94a3b8?text=Sem+Capa'">
+            <img src="${coverUrl}" alt="Capa de ${manga.title}" class="manga-cover" referrerpolicy="no-referrer" onerror="this.src='https://via.placeholder.com/250x350/1e293b/94a3b8?text=Sem+Capa'">
             <h3>${manga.title}</h3>
             <div class="manga-author">Por ${authorName}</div>
             
