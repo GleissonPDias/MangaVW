@@ -184,6 +184,10 @@ export const MangasView = {
                         <option value="false" ${manga.details && !manga.details.licensed ? 'selected' : ''}>No</option>
                     </select>
                 </div>
+                <div class="form-group">
+                    <label>ISBN</label>
+                    <input type="text" id="f-isbn" class="glass-input" value="${manga.details && manga.details.isbn !== 'N/A' ? manga.details.isbn : ''}" placeholder="ex: 978-85...">
+                </div>
             </div>
             <div class="form-group">
                 <label>Synopsis</label>
@@ -209,6 +213,7 @@ export const MangasView = {
                 const authorId = document.getElementById('f-author').value;
                 const year = document.getElementById('f-year').value;
                 const licensed = document.getElementById('f-licensed').value === 'true';
+                const isbn = document.getElementById('f-isbn').value.trim();
                 
                 const selectedGenres = Array.from(modalBody.querySelectorAll('.g-checkbox:checked')).map(cb => ({ id: parseInt(cb.value) }));
                 
@@ -219,7 +224,7 @@ export const MangasView = {
                     sinopsis, 
                     status,
                     author: { id: parseInt(authorId) },
-                    details: { publicationYear: parseInt(year) || 2024, licensed, isbn: manga.details?.isbn || "N/A" },
+                    details: { publicationYear: parseInt(year) || 2024, licensed, isbn: isbn || "N/A" },
                     genres: selectedGenres
                 };
 
