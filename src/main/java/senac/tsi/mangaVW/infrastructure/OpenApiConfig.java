@@ -43,6 +43,18 @@ import java.util.List;
                         ### 🛠️ Tech Stack
                         **Java 17** | **Spring Boot 3** | **Spring Data JPA** | **H2 Database** | **Springdoc OpenAPI**
                         
+                        ### 🔐 Authentication (API Key)
+                        This API operates statelessly. All operational endpoints require an **`X-API-Key`** header to be passed in every request. 
+                        Public endpoints, such as the Swagger documentation or the `/api-keys` generation route, are exempt. Unauthenticated requests will receive a `401 Unauthorized` response.
+                        
+                        ### 🔄 Idempotency
+                        To guarantee safe retries across distributed networks, all `POST` creation routes enforce strict idempotency logic. 
+                        Clients must provide a unique **`Idempotency-Key`** in the request header. If the exact same payload is submitted with an existing key, the server returns the cached `201 Created` response. If the payload differs, it returns `409 Conflict`.
+                        
+                        ### 🔀 API Versioning
+                        The API utilizes HTTP Headers for versioning (`X-API-Version`). 
+                        By default, requests process as version 1. Certain endpoints (like Mangas) have a Version 2 implementation offering different payload structures. Pass `X-API-Version: 2` in your headers to access these experimental or full representations.
+
                         ---
                         
                         ### ⚖️ Rate Limits (Bucket4j)
@@ -81,7 +93,7 @@ import java.util.List;
         type = SecuritySchemeType.APIKEY,
         in = SecuritySchemeIn.HEADER,
         paramName = "X-API-Key",
-        description = "Chave de autenticação necessária para rotas de escrita."
+        description = "Authentication key strictly required for all protected API operations."
 )
 // 🛡️ Garante suporte a paginação moderna e DTOs
 @EnableSpringDataWebSupport(pageSerializationMode = EnableSpringDataWebSupport.PageSerializationMode.VIA_DTO)

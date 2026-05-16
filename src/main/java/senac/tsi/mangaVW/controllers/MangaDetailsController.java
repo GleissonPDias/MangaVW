@@ -1,7 +1,4 @@
 package senac.tsi.mangaVW.controllers;
-
-import senac.tsi.mangaVW.infrastructure.RequireApiKey;
-
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -25,30 +22,24 @@ import senac.tsi.mangaVW.exceptions.MangaDetailsNotFoundException;
 import senac.tsi.mangaVW.infrastructure.RateLimit;
 import senac.tsi.mangaVW.repositories.MangaDetailsRepository;
 import senac.tsi.mangaVW.repositories.MangaRepository;
-
 import java.net.URI;
-
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.linkTo;
 import static org.springframework.hateoas.server.mvc.WebMvcLinkBuilder.methodOn;
-
 @Tag(name = "Manga Details", description = "Endpoints for managing technical publishing metadata")
 @RestController
 @RequestMapping("/manga-details")
-@ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or malformed JSON",
+@ApiResponse(responseCode = "400", description = "Invalid request: Bad parameters or syntax error",
         content = @Content(mediaType = "application/json", schema = @Schema(implementation = ApiErrorResponse.class)))
 @ApiResponse(responseCode = "429", description = "Too Many Requests: Rate limit exceeded", content = @Content)
+@ApiResponse(responseCode = "401", description = "Unauthorized: API Key is missing or invalid")
 public class MangaDetailsController {
-
     private final MangaDetailsRepository detailsRepository;
     private final PagedResourcesAssembler<MangaDetails> pagedResourcesAssembler;
     private final MangaRepository mangaRepository;
-
     private final java.util.Map<String, IdempotentCreateResponse> createResponses = new java.util.concurrent.ConcurrentHashMap<>();
     private final Object createIdempotencyLock = new Object();
-
     private record CreateDetailsFingerprint(String isbn, Integer publicationYear, boolean licensed) {}
     private record IdempotentCreateResponse(CreateDetailsFingerprint requestFingerprint, MangaDetails details, URI location) {}
-
     @Autowired
     public MangaDetailsController(MangaDetailsRepository detailsRepository,
                                   PagedResourcesAssembler<MangaDetails> pagedResourcesAssembler,
@@ -57,8 +48,6 @@ public class MangaDetailsController {
         this.pagedResourcesAssembler = pagedResourcesAssembler;
         this.mangaRepository = mangaRepository;
     }
-
-
     @Operation(summary = "Get all manga details", description = "Retrieves a paginated list of all technical metadata records. You can optionally filter by licensing status (true/false).")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Search/List completed successfully"),
@@ -69,9 +58,7 @@ public class MangaDetailsController {
     public ResponseEntity<PagedModel<EntityModel<MangaDetails>>> getAllDetails(
             @RequestParam(required = false) Boolean licensed,
             @ParameterObject @PageableDefault(page = 0, size = 20) Pageable pageable) {
-
         org.springframework.data.domain.Page<MangaDetails> details;
-
         // Se o front-end enviou ?licensed=true ou false, usamos o filtro
         if (licensed != null) {
             details = detailsRepository.findByLicensed(licensed, pageable);
@@ -80,10 +67,8 @@ public class MangaDetailsController {
         else {
             details = detailsRepository.findAll(pageable);
         }
-
         return ResponseEntity.ok(pagedResourcesAssembler.toModel(details, this::toEntityModel));
     }
-
     @Operation(summary = "Get details by ID", description = "Retrieves a specific technical details record using its unique identifier.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Manga details found successfully"),
@@ -95,10 +80,8 @@ public class MangaDetailsController {
     public ResponseEntity<EntityModel<MangaDetails>> getDetailsById(@PathVariable long id) {
         var details = detailsRepository.findById(id)
                 .orElseThrow(() -> new MangaDetailsNotFoundException(id));
-
         return ResponseEntity.ok(toEntityModel(details));
     }
-
     @Operation(summary = "Create manga details", description = "Creates a standalone technical details record which can later be attached to a manga entity.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Manga details created successfully"),
@@ -118,19 +101,15 @@ public class MangaDetailsController {
                             }
                             """)))
     @PostMapping
-    @RequireApiKey
     public ResponseEntity<EntityModel<MangaDetails>> createDetails(@Valid @RequestBody MangaDetails newDetails,
                                                                    @io.swagger.v3.oas.annotations.Parameter(description = "Required key used to make repeated create requests idempotent", required = true)
                                                                    @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
-
         var requestFingerprint = new CreateDetailsFingerprint(newDetails.getIsbn(), newDetails.getPublicationYear(), newDetails.isLicensed());
-
         synchronized (createIdempotencyLock) {
             var storedResponse = createResponses.get(idempotencyKey);
-
             if (storedResponse != null) {
                 if (!storedResponse.requestFingerprint().equals(requestFingerprint)) {
                     return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).build();
@@ -138,20 +117,16 @@ public class MangaDetailsController {
                 return ResponseEntity.created(storedResponse.location())
                         .body(toEntityModel(copyOf(storedResponse.details())));
             }
-
             MangaDetails savedDetails = detailsRepository.save(newDetails);
             URI location = URI.create("/manga-details/" + savedDetails.getId());
-
             createResponses.put(idempotencyKey, new IdempotentCreateResponse(
                     requestFingerprint,
                     copyOf(savedDetails),
                     location
             ));
-
             return ResponseEntity.created(location).body(toEntityModel(savedDetails));
         }
     }
-
     private MangaDetails copyOf(MangaDetails details) {
         MangaDetails copy = new MangaDetails();
         copy.setId(details.getId());
@@ -160,7 +135,6 @@ public class MangaDetailsController {
         copy.setLicensed(details.isLicensed());
         return copy;
     }
-
     @Operation(summary = "Update manga details", description = "Updates the ISBN, publication year, or licensing status of an existing details record.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Manga details updated successfully"),
@@ -180,19 +154,15 @@ public class MangaDetailsController {
                             }
                             """)))
     @PutMapping("/{id}")
-    @RequireApiKey
     public ResponseEntity<EntityModel<MangaDetails>> updateDetails(@PathVariable long id, @Valid @RequestBody MangaDetails updatedDetails) {
         return detailsRepository.findById(id).map(details -> {
             details.setIsbn(updatedDetails.getIsbn());
             details.setPublicationYear(updatedDetails.getPublicationYear());
             details.setLicensed(updatedDetails.isLicensed());
-
             MangaDetails savedDetails = detailsRepository.save(details);
             return ResponseEntity.ok(toEntityModel(savedDetails));
-
         }).orElseThrow(() -> new MangaDetailsNotFoundException(id));
     }
-
     @Operation(summary = "Delete manga details", description = "Safely deletes a details record. If currently linked to a manga, the relationship is automatically severed before deletion to avoid conflicts.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Deleted successfully"),
@@ -201,22 +171,18 @@ public class MangaDetailsController {
     })
     @RateLimit(capacity = 5, minutes = 10)
     @DeleteMapping("/{id}")
-    @RequireApiKey
     @jakarta.transaction.Transactional // Garante a exclusão segura
     public ResponseEntity<Void> deleteDetails(@PathVariable long id) {
         MangaDetails details = detailsRepository.findById(id)
                 .orElseThrow(() -> new MangaDetailsNotFoundException(id));
-
         // Busca se existe algum mangá usando esses detalhes para desvincular antes de deletar
         mangaRepository.findByDetailsId(id).ifPresent(manga -> {
             manga.setDetails(null);
             mangaRepository.save(manga);
         });
-
         detailsRepository.delete(details);
         return ResponseEntity.noContent().build();
     }
-
     // --- HELPER METHOD FOR HATEOAS ---
     private EntityModel<MangaDetails> toEntityModel(MangaDetails details) {
         return EntityModel.of(details,

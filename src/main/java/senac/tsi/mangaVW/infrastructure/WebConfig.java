@@ -13,12 +13,10 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     private final RateLimitInterceptor rateLimitInterceptor;
-    private final ApiKeyInterceptor apiKeyInterceptor;
 
     @Autowired
-    public WebConfig(RateLimitInterceptor rateLimitInterceptor, ApiKeyInterceptor apiKeyInterceptor) {
+    public WebConfig(RateLimitInterceptor rateLimitInterceptor) {
         this.rateLimitInterceptor = rateLimitInterceptor;
-        this.apiKeyInterceptor = apiKeyInterceptor;
     }
 
     @Override
@@ -27,6 +25,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedOriginPatterns("*") // Permite qualquer origem (pode ser restrito depois)
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD")
                 .allowedHeaders("*")
+                .exposedHeaders("Retry-After")
                 .allowCredentials(true);
     }
 
@@ -34,7 +33,6 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         // Intercepta todas as rotas da API (**)
         registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/**");
-        registry.addInterceptor(apiKeyInterceptor).addPathPatterns("/**");
     }
 
     @Override

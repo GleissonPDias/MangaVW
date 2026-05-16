@@ -65,6 +65,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
                     response.addHeader("X-RateLimit-Limit", String.valueOf(rateLimit.capacity()));
                     response.addHeader("X-RateLimit-Remaining", "0");
                     response.addHeader("Retry-After", String.valueOf(waitForRefill));
+                    response.addHeader("Access-Control-Expose-Headers", "Retry-After");
                     
                     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value()); // HTTP 429
                     response.setContentType("application/json"); // <- Swagger agora fica feliz!
